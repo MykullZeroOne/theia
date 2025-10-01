@@ -301,4 +301,223 @@ export namespace MobileRPC {
         /** Signature for further properties */
         [key: string]: boolean | number | string;
     }
+
+    // ==========================================
+    // Language Stack Profiles
+    // ==========================================
+
+    /**
+     * Configuration for a single programming language
+     * Includes LSP server info, Tree-sitter grammar, and download details
+     */
+    export interface LanguageConfig {
+        /** Unique language identifier (e.g., 'java', 'typescript') */
+        id: string;
+        /** Display name */
+        name: string;
+        /** File extensions for this language */
+        extensions: string[];
+        /** LSP server identifier */
+        lspServer: string;
+        /** Tree-sitter grammar identifier */
+        treeSitterGrammar: string;
+        /** Download URL for LSP server package */
+        downloadUrl: string;
+        /** Package size in bytes */
+        size: number;
+    }
+
+    /**
+     * A curated collection of languages for a specific development stack
+     * (e.g., "Java Full Stack" = Java + SQL + JS + HTML + CSS)
+     */
+    export interface LanguageStackProfile {
+        /** Unique profile identifier */
+        id: string;
+        /** Display name */
+        name: string;
+        /** Description of what this profile includes */
+        description: string;
+        /** Languages included in this profile */
+        languages: LanguageConfig[];
+        /** Total estimated download size in bytes */
+        estimatedSize: number;
+        /** Icon identifier */
+        icon: string;
+    }
+
+    /**
+     * Request to switch to a different language stack profile
+     */
+    export interface ProfileSwitchRequest {
+        /** ID of profile to switch to */
+        profileId: string;
+    }
+
+    /**
+     * Progress update during profile switching
+     */
+    export interface ProfileSwitchProgress {
+        /** Current phase of the switch process */
+        phase: 'downloading' | 'installing' | 'unloading' | 'complete' | 'error';
+        /** Language currently being processed */
+        languageId: string;
+        /** Progress percentage (0-100) */
+        percent: number;
+        /** Bytes downloaded so far */
+        downloadedBytes: number;
+        /** Total bytes to download */
+        totalBytes: number;
+        /** Error message (if phase is 'error') */
+        error?: string;
+    }
+
+    /**
+     * Information about the currently active profile
+     */
+    export interface ActiveProfileInfo {
+        /** Active profile ID */
+        profileId: string;
+        /** Languages currently installed */
+        installedLanguages: string[];
+        /** Total installed size in bytes */
+        totalSize: number;
+        /** Timestamp of last profile switch */
+        lastSwitched: number;
+    }
+
+    /**
+     * Predefined language stack profiles
+     */
+    export namespace LanguageProfiles {
+        export const JAVA_FULL_STACK: LanguageStackProfile = {
+            id: 'java-fullstack',
+            name: 'Java Full Stack',
+            description: 'Backend Java, SQL, Frontend JS/HTML/CSS',
+            languages: [
+                {
+                    id: 'java',
+                    name: 'Java',
+                    extensions: ['java'],
+                    lspServer: 'eclipse.jdt.ls',
+                    treeSitterGrammar: 'tree-sitter-java',
+                    downloadUrl: 'https://cdn.theia.io/lsp/java-lsp-v1.0.0.zip',
+                    size: 45_000_000 // 45MB
+                },
+                {
+                    id: 'sql',
+                    name: 'SQL',
+                    extensions: ['sql'],
+                    lspServer: 'sql-language-server',
+                    treeSitterGrammar: 'tree-sitter-sql',
+                    downloadUrl: 'https://cdn.theia.io/lsp/sql-lsp-v1.0.0.zip',
+                    size: 5_000_000 // 5MB
+                },
+                {
+                    id: 'javascript',
+                    name: 'JavaScript',
+                    extensions: ['js', 'jsx'],
+                    lspServer: 'typescript-language-server',
+                    treeSitterGrammar: 'tree-sitter-javascript',
+                    downloadUrl: 'https://cdn.theia.io/lsp/ts-lsp-v1.0.0.zip',
+                    size: 20_000_000 // 20MB
+                },
+                {
+                    id: 'html',
+                    name: 'HTML',
+                    extensions: ['html', 'htm'],
+                    lspServer: 'vscode-html-languageserver',
+                    treeSitterGrammar: 'tree-sitter-html',
+                    downloadUrl: 'https://cdn.theia.io/lsp/html-lsp-v1.0.0.zip',
+                    size: 5_000_000 // 5MB
+                },
+                {
+                    id: 'css',
+                    name: 'CSS',
+                    extensions: ['css', 'scss', 'sass'],
+                    lspServer: 'vscode-css-languageserver',
+                    treeSitterGrammar: 'tree-sitter-css',
+                    downloadUrl: 'https://cdn.theia.io/lsp/css-lsp-v1.0.0.zip',
+                    size: 5_000_000 // 5MB
+                }
+            ],
+            estimatedSize: 80_000_000, // 80MB
+            icon: 'java-icon'
+        };
+
+        export const DOTNET_FULL_STACK: LanguageStackProfile = {
+            id: 'dotnet-fullstack',
+            name: '.NET Full Stack',
+            description: 'C# backend, SQL, TypeScript/HTML/CSS frontend',
+            languages: [
+                {
+                    id: 'csharp',
+                    name: 'C#',
+                    extensions: ['cs'],
+                    lspServer: 'omnisharp',
+                    treeSitterGrammar: 'tree-sitter-c-sharp',
+                    downloadUrl: 'https://cdn.theia.io/lsp/omnisharp-v1.0.0.zip',
+                    size: 50_000_000 // 50MB
+                },
+                {
+                    id: 'sql',
+                    name: 'SQL',
+                    extensions: ['sql'],
+                    lspServer: 'sql-language-server',
+                    treeSitterGrammar: 'tree-sitter-sql',
+                    downloadUrl: 'https://cdn.theia.io/lsp/sql-lsp-v1.0.0.zip',
+                    size: 5_000_000
+                },
+                {
+                    id: 'typescript',
+                    name: 'TypeScript',
+                    extensions: ['ts', 'tsx'],
+                    lspServer: 'typescript-language-server',
+                    treeSitterGrammar: 'tree-sitter-typescript',
+                    downloadUrl: 'https://cdn.theia.io/lsp/ts-lsp-v1.0.0.zip',
+                    size: 20_000_000
+                }
+            ],
+            estimatedSize: 75_000_000,
+            icon: 'dotnet-icon'
+        };
+
+        export const MOBILE_DEV: LanguageStackProfile = {
+            id: 'mobile-dev',
+            name: 'Mobile Development',
+            description: 'Kotlin for Android, Swift for iOS',
+            languages: [
+                {
+                    id: 'kotlin',
+                    name: 'Kotlin',
+                    extensions: ['kt', 'kts'],
+                    lspServer: 'kotlin-language-server',
+                    treeSitterGrammar: 'tree-sitter-kotlin',
+                    downloadUrl: 'https://cdn.theia.io/lsp/kotlin-lsp-v1.0.0.zip',
+                    size: 30_000_000
+                },
+                {
+                    id: 'swift',
+                    name: 'Swift',
+                    extensions: ['swift'],
+                    lspServer: 'sourcekit-lsp',
+                    treeSitterGrammar: 'tree-sitter-swift',
+                    downloadUrl: 'https://cdn.theia.io/lsp/swift-lsp-v1.0.0.zip',
+                    size: 25_000_000
+                }
+            ],
+            estimatedSize: 55_000_000,
+            icon: 'mobile-icon'
+        };
+
+        export const ALL_PROFILES = [
+            JAVA_FULL_STACK,
+            DOTNET_FULL_STACK,
+            MOBILE_DEV
+        ];
+
+        export function findById(id: string): LanguageStackProfile | undefined {
+            return ALL_PROFILES.find(p => p.id === id);
+        }
+    }
 }
