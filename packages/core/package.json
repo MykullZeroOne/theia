@@ -85,9 +85,6 @@
     "access": "public"
   },
   "theiaReExports": {
-    "electron-shared": {
-      "copy": "@theia/electron#shared"
-    },
     "shared": {
       "export *": [
         "@lumino/algorithm",
