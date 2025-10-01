@@ -51,7 +51,8 @@ done
 for pkg in bulk-edit callhierarchy collaboration getting-started keymaps \
            memory-inspector metrics mini-browser notebook remote remote-wsl \
            scanoss secondary-window task timeline typehierarchy userstorage \
-           variable-resolver; do
+           variable-resolver dev-container electron file-search git outline-view \
+           preview plugin-ext-headless; do
     if [ -d "packages/$pkg" ]; then
         rm -rf "packages/$pkg"
         echo "  ✓ Removed packages/$pkg"
