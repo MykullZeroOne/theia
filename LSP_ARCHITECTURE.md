@@ -49,14 +49,14 @@
 
 This is the **standard architecture** for mobile IDEs:
 
-| Product | Extensions Run | Mobile App Is |
-|---------|---------------|---------------|
-| **Theia Mobile** (us) | Backend server | Thin UI client |
-| VS Code Remote | Remote server | Thin UI client |
-| GitHub Codespaces | Cloud server | Thin UI client |
-| JetBrains Code With Me | Host server | Thin UI client |
-| Replit Mobile | Cloud server | Thin UI client |
-| AWS Cloud9 | Cloud server | Browser UI |
+| Product                | Extensions Run | Mobile App Is  |
+|------------------------|----------------|----------------|
+| **Theia Mobile** (us)  | Backend server | Thin UI client |
+| VS Code Remote         | Remote server  | Thin UI client |
+| GitHub Codespaces      | Cloud server   | Thin UI client |
+| JetBrains Code With Me | Host server    | Thin UI client |
+| Replit Mobile          | Cloud server   | Thin UI client |
+| AWS Cloud9             | Cloud server   | Browser UI     |
 
 ## What Works in Mobile App
 
