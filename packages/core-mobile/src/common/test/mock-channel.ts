@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Channel, Disposable, DisposableCollection } from '@theia/core/lib/common';
+import { Channel, Disposable } from '../../node/mobile-connection-handler';
 
 export class MockChannel implements Channel {
     private messageHandlers: ((data: Uint8Array) => void)[] = [];

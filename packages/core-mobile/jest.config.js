@@ -15,13 +15,16 @@
 // *****************************************************************************
 
 module.exports = {
+    preset: 'ts-jest',
     testEnvironment: 'node',
-    roots: ['<rootDir>/test'],
-    testMatch: ['**/*.spec.js'],
-    moduleFileExtensions: ['js', 'json'],
+    roots: ['<rootDir>/test', '<rootDir>/src'],
+    testMatch: ['**/*.spec.ts', '**/*.spec.js'],
+    moduleFileExtensions: ['ts', 'js', 'json'],
     collectCoverageFrom: [
-        'src/**/*.js',
-        '!src/**/*.spec.js',
+        'src/**/*.ts',
+        '!src/**/*.d.ts',
+        '!src/**/*.spec.ts',
+        '!src/**/test/**'
     ],
     coverageThreshold: {
         global: {

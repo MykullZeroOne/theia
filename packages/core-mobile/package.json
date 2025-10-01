@@ -41,7 +41,9 @@
     "watch": "theiaext watch"
   },
   "devDependencies": {
-    "@theia/ext-scripts": "1.65.0"
+    "@theia/ext-scripts": "1.65.0",
+    "@types/jest": "^30.0.0",
+    "ts-jest": "^29.4.4"
   },
   "nyc": {
     "extends": "../../configs/nyc.json"

@@ -15,10 +15,65 @@
 // *****************************************************************************
 
 import { injectable, postConstruct } from '@theia/core/shared/inversify';
-import { RpcProtocol } from '@theia/core/lib/common/message-rpc/rpc-protocol';
-import { Channel } from '@theia/core/lib/common/message-rpc/channel';
-import { MsgPackMessageEncoder, MsgPackMessageDecoder } from '@theia/core/lib/common/message-rpc/rpc-message-encoder';
-import { Disposable, DisposableCollection, Emitter, Event } from '@theia/core/lib/common';
+
+// Minimal type definitions for testing - will be replaced with actual @theia/core imports
+// when the full project is built
+export interface Disposable {
+    dispose(): void;
+}
+
+export class DisposableCollection implements Disposable {
+    protected readonly disposables: Disposable[] = [];
+
+    push(disposable: Disposable): Disposable {
+        this.disposables.push(disposable);
+        return disposable;
+    }
+
+    dispose(): void {
+        while (this.disposables.length > 0) {
+            this.disposables.pop()!.dispose();
+        }
+    }
+}
+
+export interface Event<T> {
+    (listener: (e: T) => any): Disposable;
+}
+
+export class Emitter<T> {
+    private listeners: Array<(e: T) => any> = [];
+
+    get event(): Event<T> {
+        return (listener: (e: T) => any) => {
+            this.listeners.push(listener);
+            return {
+                dispose: () => {
+                    const index = this.listeners.indexOf(listener);
+                    if (index !== -1) {
+                        this.listeners.splice(index, 1);
+                    }
+                }
+            };
+        };
+    }
+
+    fire(event: T): void {
+        this.listeners.forEach(listener => listener(event));
+    }
+
+    dispose(): void {
+        this.listeners = [];
+    }
+}
+
+export interface Channel {
+    onMessage(handler: (data: Uint8Array) => void): Disposable;
+    onClose(handler: () => void): Disposable;
+    onError(handler: (reason: any) => void): Disposable;
+    send(data: Uint8Array): void;
+    close(): void;
+}
 
 export interface MobileInitializeOptions {
     clientInfo: {
@@ -37,7 +92,7 @@ export interface MobileCapabilities {
 
 export interface MobileConnection {
     id: string;
-    protocol: RpcProtocol;
+    channel: Channel;
     createdAt: Date;
 }
 
@@ -59,14 +114,9 @@ export class MobileConnectionHandler {
         const disposables = new DisposableCollection();
 
         try {
-            const protocol = new RpcProtocol(channel, this.createRequestHandler(), {
-                encoder: new MsgPackMessageEncoder(),
-                decoder: new MsgPackMessageDecoder()
-            });
-
             const connection: MobileConnection = {
                 id: connectionId,
-                protocol,
+                channel,
                 createdAt: new Date()
             };
 

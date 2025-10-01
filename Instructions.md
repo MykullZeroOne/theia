@@ -1,7 +1,3 @@
----
-apply: always
----
-
 # Theia Mobile App Development Guidelines
 
 Audience: JetBrains AI Chat Assistant working on this repository.
@@ -18,9 +14,9 @@ Repository layout (selected):
 ### 1.1 Test-Driven Development (TDD)
 - Adopt TDD for all new features and bug fixes.
 - Follow the red-green-refactor cycle:
-    1. Red: Write a failing test that defines the expected behavior.
-    2. Green: Implement the minimal code to make the test pass.
-    3. Refactor: Improve the code while ensuring tests remain passing.
+  1. Red: Write a failing test that defines the expected behavior.
+  2. Green: Implement the minimal code to make the test pass.
+  3. Refactor: Improve the code while ensuring tests remain passing.
 
 - Use Jest for unit tests in React Native.
 - Prefer fast, deterministic unit tests; reserve integration tests for end-to-end flows.
