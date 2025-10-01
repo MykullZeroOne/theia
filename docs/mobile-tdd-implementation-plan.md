@@ -835,6 +835,558 @@ describe('Mobile Backend Module', () => {
 
 ---
 
+# Phase 1.5: LSP Proxy for Extension Support (Weeks 5-6)
+
+**CRITICAL**: This phase is **required** for VS Code extensions to function in the mobile app. Without LSP proxy, extensions run on the backend but cannot communicate with the mobile UI.
+
+## Architecture Context
+
+VS Code extensions execute on the **backend server**, not on iOS. The mobile app is a **thin UI client** that:
+- Displays editor, diagnostics, completions
+- Sends user actions (typing, requests)
+- Receives LSP events from backend
+
+Similar to: VS Code Remote, GitHub Codespaces, Replit Mobile
+
+## Feature 1.5: Language Server Protocol Support
+
+**Branch**: `feature/mobile-015-lsp-proxy`
+
+### Task 1.5.1: Extend Mobile Protocol with LSP Types
+
+**TDD Steps**:
+1. 🔴 Write LSP protocol type tests
+2. 🟢 Add LSP types to mobile-protocol.ts
+3. 🔵 Add type guards for LSP types
+4. ✅ Commit: `[mobile-015] feat: add LSP protocol types`
+
+**Test**:
+```typescript
+// packages/core-mobile/src/common/mobile-protocol-lsp.spec.ts
+import { MobileRPC } from './mobile-protocol';
+import { MobileLSPGuards } from './mobile-protocol-guards';
+
+describe('Mobile LSP Protocol', () => {
+    describe('Diagnostic', () => {
+        test('should validate valid diagnostic', () => {
+            const diag: MobileRPC.Diagnostic = {
+                range: {
+                    start: { line: 0, character: 0 },
+                    end: { line: 0, character: 5 }
+                },
+                severity: 1,
+                message: 'Error'
+            };
+
+            expect(MobileLSPGuards.isValidDiagnostic(diag)).toBe(true);
+        });
+
+        test('should reject invalid diagnostic', () => {
+            const invalid = { message: 'Error' }; // Missing range
+            expect(MobileLSPGuards.isValidDiagnostic(invalid)).toBe(false);
+        });
+    });
+
+    describe('Position', () => {
+        test('should validate valid position', () => {
+            const pos: MobileRPC.Position = { line: 10, character: 5 };
+            expect(MobileLSPGuards.isValidPosition(pos)).toBe(true);
+        });
+
+        test('should reject negative line', () => {
+            expect(MobileLSPGuards.isValidPosition({ line: -1, character: 0 })).toBe(false);
+        });
+    });
+
+    describe('CompletionItem', () => {
+        test('should validate completion item', () => {
+            const item: MobileRPC.CompletionItem = {
+                label: 'console',
+                kind: 6, // Method
+                detail: 'console object',
+                insertText: 'console'
+            };
+            expect(MobileLSPGuards.isValidCompletionItem(item)).toBe(true);
+        });
+    });
+});
+```
+
+**Implementation**:
+```typescript
+// packages/core-mobile/src/common/mobile-protocol.ts
+
+export namespace MobileRPC {
+    // ... existing protocol ...
+
+    /** LSP: Backend → Mobile events */
+    export interface MobileMainContext {
+        // ... existing methods ...
+
+        /** Show diagnostics (errors, warnings) for a document */
+        $showDiagnostics(uri: string, diagnostics: Diagnostic[]): Promise<void>;
+
+        /** Show completion items at cursor */
+        $showCompletions(completions: CompletionList): Promise<void>;
+
+        /** Show hover information */
+        $showHover(hover: Hover | null): Promise<void>;
+
+        /** Show code actions (quick fixes) */
+        $showCodeActions(actions: CodeAction[]): Promise<void>;
+
+        /** Apply workspace edit (refactoring) */
+        $applyWorkspaceEdit(edit: WorkspaceEdit): Promise<boolean>;
+    }
+
+    /** LSP: Mobile → Backend requests */
+    export interface MobileExtContext {
+        // ... existing methods ...
+
+        /** Notify backend of text changes */
+        $onDidChangeTextDocument(uri: string, changes: TextDocumentChangeEvent[]): Promise<void>;
+
+        /** Request completions at position */
+        $requestCompletion(uri: string, position: Position): Promise<CompletionList>;
+
+        /** Request hover at position */
+        $requestHover(uri: string, position: Position): Promise<Hover | null>;
+
+        /** Request definition locations */
+        $requestDefinition(uri: string, position: Position): Promise<Location[]>;
+
+        /** Request code actions */
+        $requestCodeActions(uri: string, range: Range, context: CodeActionContext): Promise<CodeAction[]>;
+
+        /** Request document formatting */
+        $requestFormatting(uri: string, options: FormattingOptions): Promise<TextEdit[]>;
+    }
+
+    // LSP Types
+    export interface Position {
+        line: number;      // 0-based
+        character: number; // 0-based
+    }
+
+    export interface Range {
+        start: Position;
+        end: Position;
+    }
+
+    export interface Diagnostic {
+        range: Range;
+        severity?: DiagnosticSeverity;
+        code?: string | number;
+        source?: string;
+        message: string;
+        relatedInformation?: DiagnosticRelatedInformation[];
+    }
+
+    export enum DiagnosticSeverity {
+        Error = 1,
+        Warning = 2,
+        Information = 3,
+        Hint = 4
+    }
+
+    export interface CompletionItem {
+        label: string;
+        kind?: CompletionItemKind;
+        detail?: string;
+        documentation?: string | MarkupContent;
+        insertText?: string;
+        sortText?: string;
+        filterText?: string;
+    }
+
+    export enum CompletionItemKind {
+        Text = 1,
+        Method = 2,
+        Function = 3,
+        Constructor = 4,
+        Field = 5,
+        Variable = 6,
+        Class = 7,
+        Interface = 8,
+        Module = 9,
+        Property = 10,
+        // ... more kinds
+    }
+
+    export interface CompletionList {
+        isIncomplete: boolean;
+        items: CompletionItem[];
+    }
+
+    export interface Hover {
+        contents: MarkupContent | string;
+        range?: Range;
+    }
+
+    export interface Location {
+        uri: string;
+        range: Range;
+    }
+
+    export interface CodeAction {
+        title: string;
+        kind?: string;
+        diagnostics?: Diagnostic[];
+        edit?: WorkspaceEdit;
+        command?: Command;
+    }
+
+    export interface TextEdit {
+        range: Range;
+        newText: string;
+    }
+
+    export interface WorkspaceEdit {
+        changes?: { [uri: string]: TextEdit[] };
+    }
+
+    export interface TextDocumentChangeEvent {
+        range: Range;
+        rangeLength?: number;
+        text: string;
+    }
+
+    export interface FormattingOptions {
+        tabSize: number;
+        insertSpaces: boolean;
+    }
+
+    export interface CodeActionContext {
+        diagnostics: Diagnostic[];
+        only?: string[];
+    }
+
+    export interface MarkupContent {
+        kind: 'plaintext' | 'markdown';
+        value: string;
+    }
+
+    export interface DiagnosticRelatedInformation {
+        location: Location;
+        message: string;
+    }
+
+    export interface Command {
+        title: string;
+        command: string;
+        arguments?: any[];
+    }
+}
+```
+
+### Task 1.5.2: Implement LSP Proxy Service
+
+**TDD Steps**:
+1. 🔴 Write LSP proxy tests
+2. 🟢 Implement MobileLSPProxy
+3. 🔵 Add error handling
+4. ✅ Commit: `[mobile-015] feat: implement LSP proxy service`
+
+**Test**:
+```typescript
+// packages/core-mobile/src/node/mobile-lsp-proxy.spec.ts
+import { MobileLSPProxy } from './mobile-lsp-proxy';
+import { MobileSession } from './mobile-session-manager';
+
+describe('MobileLSPProxy', () => {
+    let proxy: MobileLSPProxy;
+    let mockLanguages: any;
+    let mockChannel: any;
+    let mockSession: MobileSession;
+
+    beforeEach(() => {
+        mockChannel = {
+            send: jest.fn(),
+            on: jest.fn(),
+        };
+
+        mockSession = {
+            id: 'session-1',
+            channel: mockChannel,
+            state: { openFiles: [] },
+            createdAt: new Date(),
+            lastActivityAt: new Date()
+        };
+
+        mockLanguages = {
+            onDidChangeDiagnostics: jest.fn((callback) => ({
+                dispose: jest.fn()
+            })),
+            getDiagnostics: jest.fn(),
+            completion: jest.fn(),
+            hover: jest.fn(),
+            definition: jest.fn(),
+            codeActions: jest.fn(),
+        };
+
+        proxy = new MobileLSPProxy();
+        (proxy as any).languages = mockLanguages;
+    });
+
+    describe('Diagnostic Forwarding', () => {
+        test('should forward diagnostics to mobile', async () => {
+            const diagnostics = [{
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+                message: 'Error'
+            }];
+
+            mockLanguages.getDiagnostics.mockReturnValue(diagnostics);
+
+            await proxy.attach(mockSession);
+
+            // Simulate diagnostic event
+            const diagCallback = mockLanguages.onDidChangeDiagnostics.mock.calls[0][0];
+            diagCallback({ uris: ['file:///test.ts'] });
+
+            expect(mockChannel.send).toHaveBeenCalledWith(
+                'showDiagnostics',
+                'file:///test.ts',
+                diagnostics
+            );
+        });
+
+        test('should handle multiple URIs in diagnostic event', async () => {
+            await proxy.attach(mockSession);
+
+            const diagCallback = mockLanguages.onDidChangeDiagnostics.mock.calls[0][0];
+            diagCallback({
+                uris: ['file:///file1.ts', 'file:///file2.ts']
+            });
+
+            expect(mockChannel.send).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('Completion Requests', () => {
+        test('should handle completion requests from mobile', async () => {
+            const mockCompletions = {
+                isIncomplete: false,
+                items: [{ label: 'console', kind: 6 }]
+            };
+
+            mockLanguages.completion.mockResolvedValue(mockCompletions);
+
+            await proxy.attach(mockSession);
+
+            const completionHandler = mockChannel.on.mock.calls.find(
+                call => call[0] === 'requestCompletion'
+            )[1];
+
+            const result = await completionHandler('file:///test.ts', { line: 10, character: 5 });
+
+            expect(result).toEqual(mockCompletions);
+            expect(mockLanguages.completion).toHaveBeenCalledWith(
+                { uri: 'file:///test.ts' },
+                { line: 10, character: 5 }
+            );
+        });
+
+        test('should return empty completions on error', async () => {
+            mockLanguages.completion.mockRejectedValue(new Error('LS crashed'));
+
+            await proxy.attach(mockSession);
+
+            const completionHandler = mockChannel.on.mock.calls.find(
+                call => call[0] === 'requestCompletion'
+            )[1];
+
+            const result = await completionHandler('file:///test.ts', { line: 10, character: 5 });
+
+            expect(result).toEqual({ isIncomplete: false, items: [] });
+        });
+    });
+
+    describe('Hover Requests', () => {
+        test('should handle hover requests', async () => {
+            const mockHover = {
+                contents: 'function foo(): void',
+                range: { start: { line: 5, character: 0 }, end: { line: 5, character: 3 } }
+            };
+
+            mockLanguages.hover.mockResolvedValue(mockHover);
+
+            await proxy.attach(mockSession);
+
+            const hoverHandler = mockChannel.on.mock.calls.find(
+                call => call[0] === 'requestHover'
+            )[1];
+
+            const result = await hoverHandler('file:///test.ts', { line: 5, character: 1 });
+
+            expect(result).toEqual(mockHover);
+        });
+
+        test('should return null when no hover available', async () => {
+            mockLanguages.hover.mockResolvedValue(null);
+
+            await proxy.attach(mockSession);
+
+            const hoverHandler = mockChannel.on.mock.calls.find(
+                call => call[0] === 'requestHover'
+            )[1];
+
+            const result = await hoverHandler('file:///test.ts', { line: 5, character: 1 });
+
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('Definition Requests', () => {
+        test('should handle go-to-definition requests', async () => {
+            const mockLocations = [{
+                uri: 'file:///other.ts',
+                range: { start: { line: 10, character: 0 }, end: { line: 10, character: 10 } }
+            }];
+
+            mockLanguages.definition.mockResolvedValue(mockLocations);
+
+            await proxy.attach(mockSession);
+
+            const defHandler = mockChannel.on.mock.calls.find(
+                call => call[0] === 'requestDefinition'
+            )[1];
+
+            const result = await defHandler('file:///test.ts', { line: 5, character: 10 });
+
+            expect(result).toEqual(mockLocations);
+        });
+    });
+
+    describe('Document Changes', () => {
+        test('should handle text document changes from mobile', async () => {
+            mockLanguages.onDidChangeContent = jest.fn();
+
+            await proxy.attach(mockSession);
+
+            const changeHandler = mockChannel.on.mock.calls.find(
+                call => call[0] === 'onDidChangeTextDocument'
+            )[1];
+
+            const changes = [{
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+                text: 'const'
+            }];
+
+            await changeHandler('file:///test.ts', changes);
+
+            expect(mockLanguages.onDidChangeContent).toHaveBeenCalledWith(
+                { uri: 'file:///test.ts' },
+                changes
+            );
+        });
+    });
+
+    describe('Disposal', () => {
+        test('should dispose all subscriptions', async () => {
+            const mockDispose = jest.fn();
+            mockLanguages.onDidChangeDiagnostics.mockReturnValue({
+                dispose: mockDispose
+            });
+
+            await proxy.attach(mockSession);
+            proxy.dispose();
+
+            expect(mockDispose).toHaveBeenCalled();
+        });
+    });
+});
+```
+
+### Task 1.5.3: Integrate LSP Proxy into Connection Handler
+
+**TDD Steps**:
+1. 🔴 Update connection handler tests
+2. 🟢 Add LSP proxy attachment
+3. ✅ Commit: `[mobile-015] feat: integrate LSP proxy into connection lifecycle`
+
+**Test**:
+```typescript
+// packages/core-mobile/src/node/mobile-connection-handler.spec.ts (add tests)
+describe('MobileConnectionHandler', () => {
+    // ... existing tests ...
+
+    describe('LSP Proxy Integration', () => {
+        test('should attach LSP proxy to new sessions', async () => {
+            const mockLSPProxy = {
+                attach: jest.fn()
+            };
+
+            handler['lspProxy'] = mockLSPProxy;
+
+            await handler.handleConnection(mockChannel);
+
+            expect(mockLSPProxy.attach).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: expect.any(String),
+                    channel: mockChannel
+                })
+            );
+        });
+
+        test('should dispose LSP proxy on disconnect', async () => {
+            const mockLSPProxy = {
+                attach: jest.fn(),
+                dispose: jest.fn()
+            };
+
+            handler['lspProxy'] = mockLSPProxy;
+
+            await handler.handleConnection(mockChannel);
+            handler.dispose();
+
+            expect(mockLSPProxy.dispose).toHaveBeenCalled();
+        });
+    });
+});
+```
+
+### Task 1.5.4: Update Backend Module with LSP Proxy
+
+**TDD Steps**:
+1. 🔴 Update backend module tests
+2. 🟢 Add LSP proxy binding
+3. ✅ Commit: `[mobile-015] feat: register LSP proxy in DI container`
+
+**Test**:
+```typescript
+// packages/core-mobile/src/node/mobile-backend-module.spec.ts (add test)
+describe('Mobile Backend Module', () => {
+    // ... existing tests ...
+
+    test('should bind MobileLSPProxy', () => {
+        const proxy = container.get(MobileLSPProxy);
+        expect(proxy).toBeInstanceOf(MobileLSPProxy);
+    });
+
+    test('should bind MobileLSPProxy as singleton', () => {
+        const proxy1 = container.get(MobileLSPProxy);
+        const proxy2 = container.get(MobileLSPProxy);
+        expect(proxy1).toBe(proxy2);
+    });
+});
+```
+
+**Implementation**:
+```typescript
+// packages/core-mobile/src/node/mobile-backend-module.ts
+import { MobileLSPProxy } from './mobile-lsp-proxy';
+
+export const MobileBackendModule = new ContainerModule(bind => {
+    bind(MobileConnectionHandler).toSelf().inSingletonScope();
+    bind(MobileSessionManager).toSelf().inSingletonScope();
+    bind(MobileLSPProxy).toSelf().inSingletonScope();  // NEW
+});
+```
+
+**Push branch and create PR**
+
+---
+
 # Phase 2: React Native App Foundation (Months 3-4)
 
 ## Feature 2.1: React Native Project Setup

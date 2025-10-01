@@ -246,6 +246,460 @@ const initOptions: MobileRPC.MobileInitializeOptions = {
 
 ---
 
+# VS Code Extension Support Architecture
+
+## How Extensions Work in Mobile App
+
+**IMPORTANT**: VS Code extensions execute on the **backend server**, NOT on the iOS device.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────┐
+│        iOS/Android App              │
+│       (React Native)                │
+│                                     │
+│  ┌─────────────────────────────┐   │
+│  │  UI Components              │   │
+│  │  • Text Editor              │   │
+│  │  • File Explorer            │   │
+│  │  • Terminal                 │   │
+│  │  • Diagnostics Display      │   │
+│  │  • Completion Popup         │   │
+│  └─────────────────────────────┘   │
+└──────────────┬──────────────────────┘
+               │
+               │ Mobile RPC Protocol
+               │ (WebSocket)
+               │ • UI updates
+               │ • User actions
+               │ • Lifecycle events
+               │
+               ↓
+┌──────────────────────────────────────┐
+│     Theia Backend Server             │
+│      (Node.js/Docker)                │
+│                                      │
+│  ┌────────────────────────────────┐ │
+│  │  @theia/core-mobile            │ │
+│  │  • Mobile RPC Handler          │ │
+│  │  • LSP Proxy ← NEW!            │ │
+│  │  • Session Manager             │ │
+│  └────────────────────────────────┘ │
+│                                      │
+│  ┌────────────────────────────────┐ │
+│  │  Extension Host                │ │
+│  │  • VSX Plugin Runtime          │ │
+│  │  • Language Servers            │ │
+│  │    - Java (JDT LS)             │ │
+│  │    - C# (OmniSharp)            │ │
+│  │    - TypeScript/Python/etc     │ │
+│  └────────────────────────────────┘ │
+│                                      │
+│  ┌────────────────────────────────┐ │
+│  │  File System                   │ │
+│  │  • Project files               │ │
+│  │  • Workspace                   │ │
+│  └────────────────────────────────┘ │
+└──────────────────────────────────────┘
+```
+
+### What This Means
+
+**✅ Extensions Provide**:
+- Auto-completion (Java, C#, TypeScript, Python, etc.)
+- Error diagnostics (red squiggles)
+- Go-to-definition, find references
+- Hover information, documentation
+- Code actions (quick fixes, refactorings)
+- Linting, formatting
+- Git integration
+
+**📱 Mobile App Provides**:
+- Text editor UI (Monaco-like)
+- File tree navigation
+- Terminal emulator
+- Status bar, notifications
+- Touch-optimized UX
+
+**❌ NOT Supported**:
+- Local extension execution on iOS
+- Extensions requiring iOS-specific APIs
+- Extensions that modify VS Code's Chrome UI (mobile has custom UI)
+
+### Similar Products
+
+This architecture is identical to:
+- **VS Code Remote Development** (extensions on server)
+- **GitHub Codespaces** (extensions in cloud)
+- **JetBrains Code With Me** (IDE on server)
+- **Replit Mobile** (execution on server)
+
+## LSP Proxy Implementation (Phase 1.5 - REQUIRED)
+
+To make extensions functional, we need to add **LSP Proxy** to `@theia/core-mobile`.
+
+### Phase 1.5: Language Server Protocol Support
+
+#### Feature 1.5.1: LSP Protocol Extensions
+
+**Extend Mobile Protocol** with LSP methods:
+
+```typescript
+// packages/core-mobile/src/common/mobile-protocol.ts
+
+export namespace MobileRPC {
+    // ... existing protocol ...
+
+    /** LSP: Backend → Mobile events */
+    export interface MobileMainContext {
+        // ... existing methods ...
+
+        /** Show diagnostics (red squiggles) for a document */
+        $showDiagnostics(uri: string, diagnostics: Diagnostic[]): Promise<void>;
+
+        /** Show completion items at cursor position */
+        $showCompletions(completions: CompletionList): Promise<void>;
+
+        /** Show hover information */
+        $showHover(hover: Hover | null): Promise<void>;
+
+        /** Show code actions (lightbulb menu) */
+        $showCodeActions(actions: CodeAction[]): Promise<void>;
+
+        /** Apply workspace edit (refactoring) */
+        $applyWorkspaceEdit(edit: WorkspaceEdit): Promise<boolean>;
+    }
+
+    /** LSP: Mobile → Backend requests */
+    export interface MobileExtContext {
+        // ... existing methods ...
+
+        /** Notify backend of text document changes */
+        $onDidChangeTextDocument(uri: string, changes: TextDocumentChangeEvent[]): Promise<void>;
+
+        /** Request completions at position */
+        $requestCompletion(uri: string, position: Position): Promise<CompletionList>;
+
+        /** Request hover info at position */
+        $requestHover(uri: string, position: Position): Promise<Hover | null>;
+
+        /** Request definition locations */
+        $requestDefinition(uri: string, position: Position): Promise<Location[]>;
+
+        /** Request code actions at range */
+        $requestCodeActions(uri: string, range: Range, context: CodeActionContext): Promise<CodeAction[]>;
+
+        /** Request formatting for document */
+        $requestFormatting(uri: string, options: FormattingOptions): Promise<TextEdit[]>;
+    }
+
+    /** LSP Types (from vscode-languageserver-protocol) */
+    export interface Diagnostic {
+        range: Range;
+        severity?: DiagnosticSeverity;
+        code?: string | number;
+        source?: string;
+        message: string;
+        relatedInformation?: DiagnosticRelatedInformation[];
+    }
+
+    export interface Position {
+        line: number;      // 0-based
+        character: number; // 0-based
+    }
+
+    export interface Range {
+        start: Position;
+        end: Position;
+    }
+
+    export interface CompletionItem {
+        label: string;
+        kind?: CompletionItemKind;
+        detail?: string;
+        documentation?: string;
+        insertText?: string;
+        sortText?: string;
+        filterText?: string;
+    }
+
+    export interface CompletionList {
+        isIncomplete: boolean;
+        items: CompletionItem[];
+    }
+
+    // ... more LSP types as needed
+}
+```
+
+#### Feature 1.5.2: LSP Proxy Service
+
+**Implement LSP proxy** to bridge extension host and mobile:
+
+```typescript
+// packages/core-mobile/src/node/mobile-lsp-proxy.ts
+
+import { injectable, inject, postConstruct } from 'inversify';
+import { Languages, Disposable } from '@theia/languages/lib/browser/languages';
+import { MobileSession } from './mobile-session-manager';
+import { MobileRPC } from '../common/mobile-protocol';
+
+@injectable()
+export class MobileLSPProxy implements Disposable {
+    @inject(Languages)
+    protected readonly languages: Languages;
+
+    protected disposables: Disposable[] = [];
+
+    @postConstruct()
+    protected init(): void {
+        // Proxy will be attached to session on connection
+    }
+
+    /**
+     * Attach LSP proxy to a mobile session.
+     * Forwards LSP events from backend to mobile.
+     */
+    async attach(session: MobileSession): Promise<void> {
+        const { channel } = session;
+
+        // Forward diagnostics to mobile
+        const diagSubscription = this.languages.onDidChangeDiagnostics(event => {
+            event.uris.forEach(uri => {
+                const diagnostics = this.languages.getDiagnostics(uri);
+                channel.send('showDiagnostics', uri.toString(), diagnostics);
+            });
+        });
+        this.disposables.push(diagSubscription);
+
+        // Handle completion requests from mobile
+        channel.on('requestCompletion', async (uri: string, position: MobileRPC.Position) => {
+            try {
+                const completions = await this.languages.completion(
+                    { uri },
+                    position
+                );
+                return completions || { isIncomplete: false, items: [] };
+            } catch (error) {
+                console.error('Completion error:', error);
+                return { isIncomplete: false, items: [] };
+            }
+        });
+
+        // Handle hover requests from mobile
+        channel.on('requestHover', async (uri: string, position: MobileRPC.Position) => {
+            try {
+                const hover = await this.languages.hover({ uri }, position);
+                return hover || null;
+            } catch (error) {
+                console.error('Hover error:', error);
+                return null;
+            }
+        });
+
+        // Handle definition requests
+        channel.on('requestDefinition', async (uri: string, position: MobileRPC.Position) => {
+            try {
+                const locations = await this.languages.definition({ uri }, position);
+                return locations || [];
+            } catch (error) {
+                console.error('Definition error:', error);
+                return [];
+            }
+        });
+
+        // Handle document change notifications
+        channel.on('onDidChangeTextDocument', async (uri: string, changes: any[]) => {
+            // Notify language servers of document changes
+            // This triggers diagnostics updates
+            await this.languages.onDidChangeContent({ uri }, changes);
+        });
+
+        // Handle code actions
+        channel.on('requestCodeActions', async (uri: string, range: MobileRPC.Range, context: any) => {
+            try {
+                const actions = await this.languages.codeActions({ uri }, range, context);
+                return actions || [];
+            } catch (error) {
+                console.error('Code actions error:', error);
+                return [];
+            }
+        });
+    }
+
+    dispose(): void {
+        this.disposables.forEach(d => d.dispose());
+        this.disposables = [];
+    }
+}
+```
+
+#### Feature 1.5.3: Update Connection Handler
+
+**Integrate LSP proxy** into connection lifecycle:
+
+```typescript
+// packages/core-mobile/src/node/mobile-connection-handler.ts
+
+@injectable()
+export class MobileConnectionHandler {
+    @inject(MobileSessionManager)
+    protected readonly sessionManager: MobileSessionManager;
+
+    @inject(MobileLSPProxy)  // NEW
+    protected readonly lspProxy: MobileLSPProxy;
+
+    async handleConnection(channel: Channel): Promise<void> {
+        const session = await this.sessionManager.createSession(channel);
+
+        // Attach LSP proxy to session
+        await this.lspProxy.attach(session);  // NEW
+
+        // ... rest of connection handling
+    }
+}
+```
+
+#### Feature 1.5.4: Update Backend Module
+
+**Register LSP proxy** in DI container:
+
+```typescript
+// packages/core-mobile/src/node/mobile-backend-module.ts
+
+import { MobileLSPProxy } from './mobile-lsp-proxy';
+
+export const MobileBackendModule = new ContainerModule(bind => {
+    bind(MobileConnectionHandler).toSelf().inSingletonScope();
+    bind(MobileSessionManager).toSelf().inSingletonScope();
+    bind(MobileLSPProxy).toSelf().inSingletonScope();  // NEW
+});
+```
+
+### TDD for LSP Proxy
+
+**Test structure** for Phase 1.5:
+
+```typescript
+// packages/core-mobile/src/node/mobile-lsp-proxy.spec.ts
+
+describe('MobileLSPProxy', () => {
+    let proxy: MobileLSPProxy;
+    let mockLanguages: Languages;
+    let mockSession: MobileSession;
+
+    beforeEach(() => {
+        mockLanguages = createMockLanguages();
+        proxy = new MobileLSPProxy();
+        (proxy as any).languages = mockLanguages;
+    });
+
+    it('should forward diagnostics to mobile', async () => {
+        const mockChannel = createMockChannel();
+        mockSession = { channel: mockChannel, id: 'test' };
+
+        await proxy.attach(mockSession);
+
+        // Simulate diagnostic event
+        mockLanguages.fireDiagnosticEvent('file:///test.ts', [
+            { message: 'Error', range: { start: {line: 0, character: 0}, end: {line: 0, character: 5} } }
+        ]);
+
+        expect(mockChannel.send).toHaveBeenCalledWith(
+            'showDiagnostics',
+            'file:///test.ts',
+            expect.arrayContaining([expect.objectContaining({ message: 'Error' })])
+        );
+    });
+
+    it('should handle completion requests', async () => {
+        // Test completion request flow
+    });
+
+    it('should handle hover requests', async () => {
+        // Test hover request flow
+    });
+});
+```
+
+### Mobile App Implementation (Phase 2)
+
+In the React Native app, implement LSP event handlers:
+
+```typescript
+// theia-mobile/src/services/LSPService.ts
+
+export class LSPService {
+    constructor(private connection: MobileConnection) {
+        this.setupListeners();
+    }
+
+    private setupListeners(): void {
+        // Receive diagnostics from backend
+        this.connection.on('showDiagnostics', (uri: string, diagnostics: Diagnostic[]) => {
+            this.onDiagnostics(uri, diagnostics);
+        });
+
+        // Receive completions from backend
+        this.connection.on('showCompletions', (completions: CompletionList) => {
+            this.onCompletions(completions);
+        });
+    }
+
+    async requestCompletion(uri: string, position: Position): Promise<CompletionList> {
+        return await this.connection.request('requestCompletion', uri, position);
+    }
+
+    async requestHover(uri: string, position: Position): Promise<Hover | null> {
+        return await this.connection.request('requestHover', uri, position);
+    }
+
+    notifyTextChange(uri: string, changes: TextChange[]): void {
+        this.connection.send('onDidChangeTextDocument', uri, changes);
+    }
+}
+```
+
+```typescript
+// theia-mobile/src/components/Editor.tsx
+
+const Editor: React.FC = () => {
+    const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
+    const lspService = useLSPService();
+
+    useEffect(() => {
+        // Subscribe to diagnostics
+        lspService.onDiagnostics = (uri, diags) => {
+            if (uri === currentFileUri) {
+                setDiagnostics(diags);
+            }
+        };
+    }, [currentFileUri]);
+
+    const handleTextChange = (text: string) => {
+        // Notify backend of changes
+        lspService.notifyTextChange(currentFileUri, [{ text }]);
+    };
+
+    const handleCompletionRequest = async (position: Position) => {
+        const completions = await lspService.requestCompletion(currentFileUri, position);
+        showCompletionPopup(completions);
+    };
+
+    return (
+        <CodeEditor
+            value={text}
+            onChange={handleTextChange}
+            onCompletionRequest={handleCompletionRequest}
+            diagnostics={diagnostics}
+        />
+    );
+};
+```
+
+---
+
 Spring Boot Guidelines
 
 ## 1. Prefer Constructor Injection over Field/Setter Injection
