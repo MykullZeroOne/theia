@@ -102,7 +102,11 @@
     "performance:startup": "npm run -s performance:startup:browser && npm run -s performance:startup:electron",
     "performance:startup:browser": "concurrently --success first -k -r \"cd scripts/performance && node browser-performance.js --name 'Browser Frontend Startup' --folder browser --runs 10\" \"npm run -s --cwd examples/browser start\"",
     "performance:startup:electron": "npm run -s electron rebuild && cd scripts/performance && node electron-performance.js --name 'Electron Frontend Startup' --folder electron --runs 10",
-    "zip:native:dependencies": "node ./scripts/zip-native-dependencies.js"
+    "zip:native:dependencies": "node ./scripts/zip-native-dependencies.js",
+    "mobile:install": "cd examples/mobile && npm install",
+    "mobile:test": "lerna run test --scope '@theia/*mobile*'",
+    "mobile:build": "lerna run compile --scope @theia/core-mobile",
+    "mobile:watch": "lerna run watch --scope @theia/core-mobile"
   },
   "workspaces": [
     "dev-packages/*",
