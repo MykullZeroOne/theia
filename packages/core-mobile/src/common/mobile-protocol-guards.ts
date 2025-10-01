@@ -123,3 +123,141 @@ export namespace MobileProtocolGuards {
         return validPermissions.includes(value);
     }
 }
+
+export namespace MobileLSPGuards {
+    export function isValidPosition(value: any): value is MobileRPC.Position {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (typeof value.line !== 'number' || value.line < 0) {
+            return false;
+        }
+        if (typeof value.character !== 'number' || value.character < 0) {
+            return false;
+        }
+        return true;
+    }
+
+    export function isValidRange(value: any): value is MobileRPC.Range {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (!isValidPosition(value.start)) {
+            return false;
+        }
+        if (!isValidPosition(value.end)) {
+            return false;
+        }
+        return true;
+    }
+
+    export function isValidDiagnostic(value: any): value is MobileRPC.Diagnostic {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (!isValidRange(value.range)) {
+            return false;
+        }
+        if (typeof value.message !== 'string' || value.message.length === 0) {
+            return false;
+        }
+        if (value.severity !== undefined) {
+            if (typeof value.severity !== 'number' || value.severity < 1 || value.severity > 4) {
+                return false;
+            }
+        }
+        if (value.code !== undefined) {
+            if (typeof value.code !== 'string' && typeof value.code !== 'number') {
+                return false;
+            }
+        }
+        if (value.source !== undefined && typeof value.source !== 'string') {
+            return false;
+        }
+        return true;
+    }
+
+    export function isValidCompletionItem(value: any): value is MobileRPC.CompletionItem {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (typeof value.label !== 'string' || value.label.length === 0) {
+            return false;
+        }
+        if (value.kind !== undefined) {
+            if (typeof value.kind !== 'number' || value.kind < 1 || value.kind > 25) {
+                return false;
+            }
+        }
+        if (value.detail !== undefined && typeof value.detail !== 'string') {
+            return false;
+        }
+        if (value.insertText !== undefined && typeof value.insertText !== 'string') {
+            return false;
+        }
+        return true;
+    }
+
+    export function isValidCompletionList(value: any): value is MobileRPC.CompletionList {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (typeof value.isIncomplete !== 'boolean') {
+            return false;
+        }
+        if (!Array.isArray(value.items)) {
+            return false;
+        }
+        for (const item of value.items) {
+            if (!isValidCompletionItem(item)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    export function isValidMarkupContent(value: any): value is MobileRPC.MarkupContent {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (value.kind !== 'plaintext' && value.kind !== 'markdown') {
+            return false;
+        }
+        if (typeof value.value !== 'string') {
+            return false;
+        }
+        return true;
+    }
+
+    export function isValidHover(value: any): value is MobileRPC.Hover {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (!value.contents) {
+            return false;
+        }
+        if (typeof value.contents === 'string') {
+            return true;
+        }
+        if (!isValidMarkupContent(value.contents)) {
+            return false;
+        }
+        if (value.range !== undefined && !isValidRange(value.range)) {
+            return false;
+        }
+        return true;
+    }
+
+    export function isValidLocation(value: any): value is MobileRPC.Location {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+        if (typeof value.uri !== 'string' || value.uri.length === 0) {
+            return false;
+        }
+        if (!isValidRange(value.range)) {
+            return false;
+        }
+        return true;
+    }
+}

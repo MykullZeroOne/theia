@@ -35,7 +35,12 @@ describe('Mobile RPC Protocol', () => {
                 '$registerComponent',
                 '$showToast',
                 '$vibrate',
-                '$requestPermission'
+                '$requestPermission',
+                '$showDiagnostics',
+                '$showCompletions',
+                '$showHover',
+                '$showCodeActions',
+                '$applyWorkspaceEdit'
             ];
 
             // Create mock implementation to verify interface structure
@@ -45,7 +50,12 @@ describe('Mobile RPC Protocol', () => {
                 $registerComponent: jest.fn(),
                 $showToast: jest.fn(),
                 $vibrate: jest.fn(),
-                $requestPermission: jest.fn()
+                $requestPermission: jest.fn(),
+                $showDiagnostics: jest.fn(),
+                $showCompletions: jest.fn(),
+                $showHover: jest.fn(),
+                $showCodeActions: jest.fn(),
+                $applyWorkspaceEdit: jest.fn()
             };
 
             methods.forEach(method => {
@@ -61,7 +71,12 @@ describe('Mobile RPC Protocol', () => {
                 '$onDidChangeOrientation',
                 '$onDidEnterBackground',
                 '$onDidEnterForeground',
-                '$executeCommand'
+                '$executeCommand',
+                '$requestCompletion',
+                '$requestHover',
+                '$requestDefinition',
+                '$requestCodeActions',
+                '$requestFormatting'
             ];
 
             const mockImpl: MobileRPC.MobileExtContext = {
@@ -69,7 +84,12 @@ describe('Mobile RPC Protocol', () => {
                 $onDidChangeOrientation: jest.fn(),
                 $onDidEnterBackground: jest.fn(),
                 $onDidEnterForeground: jest.fn(),
-                $executeCommand: jest.fn()
+                $executeCommand: jest.fn(),
+                $requestCompletion: jest.fn(),
+                $requestHover: jest.fn(),
+                $requestDefinition: jest.fn(),
+                $requestCodeActions: jest.fn(),
+                $requestFormatting: jest.fn()
             };
 
             methods.forEach(method => {
