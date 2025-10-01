@@ -13,10 +13,14 @@ This project uses a **hybrid repository architecture** for mobile development:
 
 ### Phase 2: Mobile App in Separate Repo (Future)
 - **Location**: New `theia-mobile` repository (to be created)
-- **Purpose**: React Native mobile application for iOS/Android
-- **Dependencies**: Consumes published `@theia/core-mobile` from npm
-- **Technology**: React Native, Expo, TypeScript
-- **Tests**: Jest with React Native Testing Library
+- **Purpose**: **Kotlin Multiplatform Mobile (KMM)** application for iOS and Android
+- **Dependencies**: Consumes published `@theia/core-mobile` from npm (for protocol types)
+- **Technology**:
+  - **Shared**: Kotlin Multiplatform (70-80% code sharing)
+  - **iOS UI**: SwiftUI
+  - **Android UI**: Jetpack Compose
+  - **Networking**: Ktor (WebSocket client)
+- **Tests**: Kotlin Test for shared code, XCTest for iOS, JUnit for Android
 
 ### Why This Approach?
 
@@ -28,10 +32,11 @@ This project uses a **hybrid repository architecture** for mobile development:
 
 **Mobile App Separate:**
 - ✅ Independent release cycles
-- ✅ Standard React Native/Expo tooling
+- ✅ Standard Kotlin/Gradle tooling
 - ✅ Faster CI/CD for mobile-only changes
-- ✅ Cleaner Metro bundler configuration
+- ✅ Native performance (no JavaScript bridge)
 - ✅ Mobile team can work independently
+- ✅ Type-safe backend integration (Kotlin ↔ TypeScript types)
 
 ### Package Publishing Strategy
 
@@ -42,8 +47,13 @@ This project uses a **hybrid repository architecture** for mobile development:
 - Test utilities for mobile client testing
 
 Mobile app will consume:
-```typescript
-import { MobileRPC, MobileProtocolGuards } from '@theia/core-mobile';
+```kotlin
+// Shared KMM code
+import com.theia.mobile.protocol.MobileRPC
+import com.theia.mobile.protocol.Position
+import com.theia.mobile.protocol.Diagnostic
+
+// TypeScript types converted to Kotlin via code generation or manual mapping
 ```
 
 ---
