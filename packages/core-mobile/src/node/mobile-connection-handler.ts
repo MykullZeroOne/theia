@@ -14,7 +14,9 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { injectable, postConstruct } from '@theia/core/shared/inversify';
+import { injectable, postConstruct, inject } from '@theia/core/shared/inversify';
+import { MobileSessionManager } from './mobile-session-manager';
+import { MobileLSPProxy } from './mobile-lsp-proxy';
 
 // Minimal type definitions for testing - will be replaced with actual @theia/core imports
 // when the full project is built
@@ -104,6 +106,12 @@ export class MobileConnectionHandler {
 
     readonly onError: Event<Error> = this.onErrorEmitter.event;
 
+    @inject(MobileSessionManager)
+    protected sessionManager?: MobileSessionManager;
+
+    @inject(MobileLSPProxy)
+    protected lspProxy?: MobileLSPProxy;
+
     @postConstruct()
     protected init(): void {
         // Initialization logic if needed
@@ -119,6 +127,23 @@ export class MobileConnectionHandler {
                 channel,
                 createdAt: new Date()
             };
+
+            // Create session for this connection (if session manager available)
+            if (this.sessionManager) {
+                const session = await this.sessionManager.createSession(channel);
+
+                // Attach LSP proxy to session (if LSP proxy available)
+                if (this.lspProxy) {
+                    await this.lspProxy.attach(session);
+
+                    // Ensure LSP proxy is disposed when connection closes
+                    disposables.push({
+                        dispose: () => {
+                            this.lspProxy?.dispose();
+                        }
+                    });
+                }
+            }
 
             disposables.push(channel.onClose(() => {
                 this.cleanupConnection(connectionId);

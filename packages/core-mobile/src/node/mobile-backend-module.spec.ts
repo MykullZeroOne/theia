@@ -18,6 +18,7 @@ import { Container } from '@theia/core/shared/inversify';
 import { MobileBackendModule } from './mobile-backend-module';
 import { MobileConnectionHandler } from './mobile-connection-handler';
 import { MobileSessionManager } from './mobile-session-manager';
+import { MobileLSPProxy } from './mobile-lsp-proxy';
 
 describe('Mobile Backend Module', () => {
     let container: Container;
@@ -37,6 +38,11 @@ describe('Mobile Backend Module', () => {
             const manager = container.get(MobileSessionManager);
             expect(manager).toBeInstanceOf(MobileSessionManager);
         });
+
+        test('should bind MobileLSPProxy', () => {
+            const proxy = container.get(MobileLSPProxy);
+            expect(proxy).toBeInstanceOf(MobileLSPProxy);
+        });
     });
 
     describe('Singleton Scope', () => {
@@ -51,6 +57,12 @@ describe('Mobile Backend Module', () => {
             const manager2 = container.get(MobileSessionManager);
             expect(manager1).toBe(manager2);
         });
+
+        test('MobileLSPProxy should be singleton', () => {
+            const proxy1 = container.get(MobileLSPProxy);
+            const proxy2 = container.get(MobileLSPProxy);
+            expect(proxy1).toBe(proxy2);
+        });
     });
 
     describe('Service Initialization', () => {
@@ -58,6 +70,7 @@ describe('Mobile Backend Module', () => {
             expect(() => {
                 container.get(MobileConnectionHandler);
                 container.get(MobileSessionManager);
+                container.get(MobileLSPProxy);
             }).not.toThrow();
         });
 
@@ -69,6 +82,10 @@ describe('Mobile Backend Module', () => {
             const manager = container.get(MobileSessionManager);
             expect(typeof manager.createSession).toBe('function');
             expect(typeof manager.getSession).toBe('function');
+
+            const proxy = container.get(MobileLSPProxy);
+            expect(typeof proxy.attach).toBe('function');
+            expect(typeof proxy.dispose).toBe('function');
         });
     });
 
