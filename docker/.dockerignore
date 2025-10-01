@@ -1,0 +1,49 @@
+# Node modules
+node_modules
+**/node_modules
+
+# Build artifacts
+lib
+**/lib
+*.log
+*.tgz
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+.theia
+
+# Documentation
+doc
+docs/api
+
+# Test files
+**/*.spec.ts
+**/*.test.ts
+**/test
+**/__tests__
+
+# CI/CD
+.github
+
+# Examples (except minimal)
+examples/browser
+examples/electron
+examples/playwright
+
+# Unnecessary packages (will be removed)
+packages/ai-*
+packages/scanoss
+packages/plugin-dev
+packages/plugin-metrics
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+coverage
+.nyc_output

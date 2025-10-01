@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  theia-mobile-backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: theia-mobile-backend
+    ports:
+      - "3000:3000"   # Theia backend
+      - "3030:3030"   # Mobile WebSocket
+    volumes:
+      # Mount workspace directory
+      - ../workspace:/workspace
+      # Mount plugins directory
+      - ../plugins:/app/plugins
+      # Persist user data
+      - theia-data:/home/theia/.theia
+    environment:
+      # Workspace location
+      - THEIA_WORKSPACE=/workspace
+      # Enable mobile endpoints
+      - THEIA_MOBILE_ENABLED=true
+      # VSX Registry
+      - VSX_REGISTRY_URL=https://open-vsx.org/api
+      # Java configuration
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      # .NET configuration
+      - DOTNET_ROOT=/usr/share/dotnet
+      # Node environment
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: Redis for session storage
+  redis:
+    image: redis:7-alpine
+    container_name: theia-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+volumes:
+  theia-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    name: theia-mobile-network
