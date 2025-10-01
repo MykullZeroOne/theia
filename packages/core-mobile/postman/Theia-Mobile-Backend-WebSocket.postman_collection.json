@@ -1,0 +1,532 @@
+{
+  "info": {
+    "name": "Theia Mobile Backend - WebSocket RPC",
+    "description": "WebSocket RPC methods for Theia Mobile Backend. Use Postman's WebSocket support to test these requests.\n\n## Connection\nConnect to: ws://localhost:3030/mobile\n\n## Protocol\nAll messages are JSON-encoded following the Mobile RPC Protocol:\n- **Request**: `{\"id\": \"<uuid>\", \"method\": \"<method>\", \"params\": [...]}`\n- **Response**: `{\"id\": \"<uuid>\", \"result\": {...}}` or `{\"id\": \"<uuid>\", \"error\": {...}}`\n- **Notification**: `{\"method\": \"<method>\", \"params\": [...]}`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "theia-mobile-backend"
+  },
+  "item": [
+    {
+      "name": "Initialization",
+      "item": [
+        {
+          "name": "Initialize Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/initialize\",\n  \"params\": [{\n    \"clientInfo\": {\n      \"name\": \"ModusFabrica\",\n      \"version\": \"1.0.0\"\n    },\n    \"capabilities\": {}\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Initialize the mobile session and exchange capabilities between client and server.\n\n**Request**:\n- `clientInfo.name`: Client application name\n- `clientInfo.version`: Client version\n- `capabilities`: Client capabilities (currently empty object)\n\n**Response**:\n- `serverCapabilities`: LSP capabilities (textDocumentSync, completionProvider, etc.)\n- `mobileCapabilities`: Mobile-specific capabilities (offlineMode, backgroundSync, etc.)"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"1\",\n  \"method\": \"mobile/initialize\",\n  \"params\": [{\n    \"clientInfo\": {\n      \"name\": \"ModusFabrica\",\n      \"version\": \"1.0.0\"\n    },\n    \"capabilities\": {}\n  }]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "ws://localhost:3030/mobile",
+                  "protocol": "ws",
+                  "host": ["localhost"],
+                  "port": "3030",
+                  "path": ["mobile"]
+                }
+              },
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"id\": \"1\",\n  \"result\": {\n    \"serverCapabilities\": {\n      \"textDocumentSync\": 2,\n      \"completionProvider\": {\n        \"triggerCharacters\": [\".\", \":\"]\n      },\n      \"hoverProvider\": true,\n      \"definitionProvider\": true\n    },\n    \"mobileCapabilities\": {\n      \"offlineMode\": true,\n      \"backgroundSync\": true,\n      \"gestureSupport\": true,\n      \"hapticFeedback\": true\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Request Capabilities",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/requestCapabilities\",\n  \"params\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Request mobile-specific capabilities from the server."
+          },
+          "response": []
+        }
+      ],
+      "description": "Initialization and capability exchange methods"
+    },
+    {
+      "name": "Session Management",
+      "item": [
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/createSession\",\n  \"params\": [{\n    \"clientId\": \"{{clientId}}\",\n    \"workspace\": \"file:///workspace\"\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Create a new session for the client.\n\n**Request**:\n- `clientId`: Unique client identifier (UUID)\n- `workspace`: Optional workspace URI\n\n**Response**:\n- `id`: Session ID\n- `createdAt`: Creation timestamp\n- `workspace`: Workspace URI"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"2\",\n  \"method\": \"mobile/createSession\",\n  \"params\": [{\n    \"clientId\": \"client-123\",\n    \"workspace\": \"file:///workspace\"\n  }]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "ws://localhost:3030/mobile",
+                  "protocol": "ws",
+                  "host": ["localhost"],
+                  "port": "3030",
+                  "path": ["mobile"]
+                }
+              },
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"id\": \"2\",\n  \"result\": {\n    \"id\": \"session-abc123\",\n    \"createdAt\": 1704110400000,\n    \"workspace\": \"file:///workspace\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Restore Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/restoreSession\",\n  \"params\": [{\n    \"sessionId\": \"{{sessionId}}\",\n    \"clientId\": \"{{clientId}}\"\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Restore a previously created session.\n\n**Request**:\n- `sessionId`: Previous session ID\n- `clientId`: Client identifier\n\n**Response**:\n- `sessionId`: Restored session ID\n- `workspace`: Workspace URI\n- `openFiles`: Array of open file URIs\n- `activeFile`: Active file URI\n- `profileId`: Active language profile ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Session State (Notification)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"mobile/updateSessionState\",\n  \"params\": [{\n    \"sessionId\": \"{{sessionId}}\",\n    \"workspace\": \"file:///workspace\",\n    \"openFiles\": [\n      \"file:///workspace/src/Main.java\",\n      \"file:///workspace/src/App.java\"\n    ],\n    \"activeFile\": \"file:///workspace/src/Main.java\"\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Notify server of session state changes (notification - no response expected)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Session lifecycle management methods"
+    },
+    {
+      "name": "LSP Operations",
+      "item": [
+        {
+          "name": "Did Open Text Document (Notification)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"mobile/didOpenTextDocument\",\n  \"params\": [{\n    \"textDocument\": {\n      \"uri\": \"file:///workspace/src/Main.java\",\n      \"languageId\": \"java\",\n      \"version\": 1,\n      \"text\": \"public class Main {\\n    public static void main(String[] args) {\\n        System.out.println(\\\"Hello World\\\");\\n    }\\n}\"\n    }\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Notify server that a text document was opened (notification - no response)."
+          },
+          "response": []
+        },
+        {
+          "name": "Did Change Text Document (Notification)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"mobile/didChangeTextDocument\",\n  \"params\": [{\n    \"textDocument\": {\n      \"uri\": \"file:///workspace/src/Main.java\",\n      \"version\": 2\n    },\n    \"contentChanges\": [{\n      \"range\": {\n        \"start\": {\"line\": 2, \"character\": 8},\n        \"end\": {\"line\": 2, \"character\": 8}\n      },\n      \"text\": \"int x = 10;\\n        \"\n    }]\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Notify server of incremental text document changes (notification - no response)."
+          },
+          "response": []
+        },
+        {
+          "name": "Did Close Text Document (Notification)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"mobile/didCloseTextDocument\",\n  \"params\": [{\n    \"textDocument\": {\n      \"uri\": \"file:///workspace/src/Main.java\"\n    }\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Notify server that a text document was closed (notification - no response)."
+          },
+          "response": []
+        },
+        {
+          "name": "Request Completion",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/completion\",\n  \"params\": [{\n    \"textDocument\": {\n      \"uri\": \"file:///workspace/src/Main.java\"\n    },\n    \"position\": {\n      \"line\": 2,\n      \"character\": 15\n    },\n    \"context\": {\n      \"triggerKind\": 2,\n      \"triggerCharacter\": \".\"\n    }\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Request code completion suggestions at a specific position."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"3\",\n  \"method\": \"mobile/completion\",\n  \"params\": [{\n    \"textDocument\": {\"uri\": \"file:///workspace/src/Main.java\"},\n    \"position\": {\"line\": 2, \"character\": 15},\n    \"context\": {\"triggerKind\": 2, \"triggerCharacter\": \".\"}\n  }]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "ws://localhost:3030/mobile",
+                  "protocol": "ws",
+                  "host": ["localhost"],
+                  "port": "3030",
+                  "path": ["mobile"]
+                }
+              },
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"id\": \"3\",\n  \"result\": {\n    \"isIncomplete\": false,\n    \"items\": [\n      {\n        \"label\": \"println\",\n        \"kind\": 2,\n        \"detail\": \"void println(String x)\",\n        \"insertText\": \"println\"\n      },\n      {\n        \"label\": \"print\",\n        \"kind\": 2,\n        \"detail\": \"void print(String s)\",\n        \"insertText\": \"print\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Request Hover",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/hover\",\n  \"params\": [{\n    \"textDocument\": {\n      \"uri\": \"file:///workspace/src/Main.java\"\n    },\n    \"position\": {\n      \"line\": 2,\n      \"character\": 10\n    }\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Request hover information (documentation) at a specific position."
+          },
+          "response": []
+        },
+        {
+          "name": "Go to Definition",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/definition\",\n  \"params\": [{\n    \"textDocument\": {\n      \"uri\": \"file:///workspace/src/Main.java\"\n    },\n    \"position\": {\n      \"line\": 2,\n      \"character\": 10\n    }\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Request definition location for symbol at cursor position."
+          },
+          "response": []
+        }
+      ],
+      "description": "Language Server Protocol operations for code intelligence"
+    },
+    {
+      "name": "Language Profiles",
+      "item": [
+        {
+          "name": "List Profiles",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/listProfiles\",\n  \"params\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Get all available language stack profiles."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"4\",\n  \"method\": \"mobile/listProfiles\",\n  \"params\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "ws://localhost:3030/mobile",
+                  "protocol": "ws",
+                  "host": ["localhost"],
+                  "port": "3030",
+                  "path": ["mobile"]
+                }
+              },
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"id\": \"4\",\n  \"result\": [\n    {\n      \"id\": \"java-fullstack\",\n      \"name\": \"Java Full Stack\",\n      \"description\": \"Backend Java, SQL, Frontend JS/HTML/CSS\",\n      \"languages\": [\n        {\n          \"id\": \"java\",\n          \"name\": \"Java\",\n          \"extensions\": [\".java\"],\n          \"lspServer\": \"jdtls\",\n          \"treeSitterGrammar\": \"tree-sitter-java\",\n          \"downloadUrl\": \"https://example.com/jdtls.tar.gz\",\n          \"size\": 32000000\n        }\n      ],\n      \"estimatedSize\": 80000000,\n      \"icon\": \"java-icon\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Switch Profile",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/switchProfile\",\n  \"params\": [{\n    \"profileId\": \"java-fullstack\",\n    \"sessionId\": \"{{sessionId}}\"\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Switch to a different language profile. Server will send progress notifications during the switch."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Profile",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"method\": \"mobile/getActiveProfile\",\n  \"params\": [{\n    \"sessionId\": \"{{sessionId}}\"\n  }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "ws://{{host}}:{{port}}/mobile",
+              "protocol": "ws",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["mobile"]
+            },
+            "description": "Get currently active language profile for the session."
+          },
+          "response": []
+        }
+      ],
+      "description": "Language profile management methods (protocol ready, service implementation pending)"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Generate UUID for request ID if not set",
+          "if (!pm.variables.get('requestId')) {",
+          "    pm.variables.set('requestId', pm.variables.replaceIn('{{$guid}}'));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "host",
+      "value": "localhost",
+      "type": "string"
+    },
+    {
+      "key": "port",
+      "value": "3030",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "{{$guid}}",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

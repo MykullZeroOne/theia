@@ -5,7 +5,11 @@
   "main": "lib/common/index.js",
   "typings": "lib/common/index.d.ts",
   "dependencies": {
-    "@theia/core": "1.65.0"
+    "@theia/core": "1.65.0",
+    "express": "^4.18.2",
+    "swagger-ui-express": "^5.0.0",
+    "ws": "^8.14.2",
+    "yamljs": "^0.3.0"
   },
   "publishConfig": {
     "access": "public"
@@ -38,11 +42,16 @@
     "lint": "theiaext lint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "watch": "theiaext watch"
+    "watch": "theiaext watch",
+    "start:backend": "node lib/node/backend-main.js"
   },
   "devDependencies": {
     "@theia/ext-scripts": "1.65.0",
+    "@types/express": "^4.17.20",
     "@types/jest": "^30.0.0",
+    "@types/swagger-ui-express": "^4.1.6",
+    "@types/ws": "^8.5.8",
+    "@types/yamljs": "^0.2.34",
     "ts-jest": "^29.4.4"
   },
   "nyc": {

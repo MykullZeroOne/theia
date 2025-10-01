@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mobile-backend:
+    build:
+      context: ../..
+      dockerfile: packages/core-mobile/Dockerfile
+    container_name: theia-mobile-backend
+    ports:
+      - "${MOBILE_BACKEND_PORT:-3030}:3030"
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - MOBILE_BACKEND_PORT=3030
+      - MOBILE_BACKEND_HOST=0.0.0.0
+      - MOBILE_WS_PATH=/mobile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - theia-mobile
+
+  # Optional: Nginx reverse proxy for SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: theia-mobile-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - mobile-backend
+    restart: unless-stopped
+    networks:
+      - theia-mobile
+    profiles:
+      - with-ssl
+
+networks:
+  theia-mobile:
+    driver: bridge

@@ -1,0 +1,982 @@
+openapi: 3.0.3
+info:
+  title: Theia Mobile Backend API
+  description: |
+    Mobile backend API for Eclipse Theia IDE, enabling iOS and Android clients to connect via WebSocket and interact with language servers.
+
+    ## Overview
+
+    The Theia Mobile Backend provides:
+    - **WebSocket RPC Communication**: Real-time bidirectional messaging over WebSocket
+    - **Session Management**: Persistent sessions with state tracking
+    - **LSP Integration**: Full Language Server Protocol support
+    - **Language Profiles**: On-demand language server management
+
+    ## Architecture
+
+    ```
+    Mobile Client → WebSocket → Connection Handler → Session Manager → LSP Proxy → Language Servers
+    ```
+
+    ## Authentication
+
+    Currently, no authentication is required (to be added in future version).
+
+    ## Rate Limiting
+
+    No rate limiting is currently enforced (to be added in future version).
+
+  version: 1.0.0
+  contact:
+    name: Theia Mobile Backend
+    url: https://theia-ide.org
+  license:
+    name: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
+    url: https://www.eclipse.org/legal/epl-2.0/
+
+servers:
+  - url: http://localhost:3030
+    description: Local development server
+  - url: ws://localhost:3030
+    description: Local WebSocket server
+  - url: https://api.modusfabrica.io
+    description: Production server
+  - url: wss://api.modusfabrica.io
+    description: Production WebSocket server
+
+tags:
+  - name: Health
+    description: Health check and monitoring endpoints
+  - name: WebSocket
+    description: WebSocket connection and RPC methods
+  - name: Initialization
+    description: Client initialization and capability exchange
+  - name: Session
+    description: Session management operations
+  - name: LSP
+    description: Language Server Protocol operations
+  - name: Profiles
+    description: Language profile management
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Returns the current health status of the backend server
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                uptime: 3600.123
+                timestamp: '2025-01-01T12:00:00.000Z'
+                version: '1.0.0'
+        '503':
+          description: Server is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile:
+    get:
+      summary: WebSocket Connection Endpoint
+      description: |
+        Upgrade HTTP connection to WebSocket for real-time communication.
+
+        ## Connection Flow
+        1. Client sends HTTP GET with Upgrade: websocket header
+        2. Server responds with 101 Switching Protocols
+        3. WebSocket connection established
+        4. Client sends mobile/initialize RPC request
+        5. Server responds with capabilities
+        6. Bidirectional RPC communication begins
+
+        ## WebSocket Protocol
+        All messages are JSON-encoded strings following the Mobile RPC Protocol.
+
+        See the WebSocket RPC Methods section below for available operations.
+      operationId: connectWebSocket
+      tags:
+        - WebSocket
+      parameters:
+        - name: Upgrade
+          in: header
+          required: true
+          schema:
+            type: string
+            enum:
+              - websocket
+        - name: Connection
+          in: header
+          required: true
+          schema:
+            type: string
+            enum:
+              - Upgrade
+        - name: Sec-WebSocket-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: Sec-WebSocket-Version
+          in: header
+          required: true
+          schema:
+            type: string
+            enum:
+              - '13'
+      responses:
+        '101':
+          description: Switching Protocols - WebSocket connection established
+        '400':
+          description: Bad Request - Invalid WebSocket upgrade request
+        '426':
+          description: Upgrade Required - Missing required WebSocket headers
+
+components:
+  schemas:
+    # Health Check Schemas
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - uptime
+        - timestamp
+        - version
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - degraded
+            - error
+          description: Current health status
+        uptime:
+          type: number
+          description: Server uptime in seconds
+          example: 3600.123
+        timestamp:
+          type: string
+          format: date-time
+          description: Current server timestamp
+        version:
+          type: string
+          description: Backend version
+          example: '1.0.0'
+        connections:
+          type: integer
+          description: Number of active WebSocket connections (optional)
+          example: 42
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: integer
+              description: Error code
+            message:
+              type: string
+              description: Human-readable error message
+            data:
+              type: object
+              description: Additional error data
+
+    # RPC Protocol Schemas
+    RpcRequest:
+      type: object
+      required:
+        - id
+        - method
+        - params
+      properties:
+        id:
+          type: string
+          description: Unique request identifier (UUID recommended)
+          example: '550e8400-e29b-41d4-a716-446655440000'
+        method:
+          type: string
+          description: RPC method name
+          example: 'mobile/initialize'
+        params:
+          type: array
+          description: Method parameters
+          items: {}
+
+    RpcResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Matching request ID
+        result:
+          description: Result on success
+        error:
+          $ref: '#/components/schemas/RpcError'
+
+    RpcNotification:
+      type: object
+      required:
+        - method
+        - params
+      properties:
+        method:
+          type: string
+          description: Notification method name
+        params:
+          type: array
+          description: Notification parameters
+          items: {}
+
+    RpcError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: Error code (JSON-RPC 2.0 compatible)
+          enum:
+            - -32700  # Parse error
+            - -32600  # Invalid request
+            - -32601  # Method not found
+            - -32602  # Invalid params
+            - -32603  # Internal error
+            - -32100  # Session not found
+            - -32101  # LSP error
+            - -32102  # Profile not found
+            - -32103  # Download failed
+            - -32104  # Offline mode
+        message:
+          type: string
+          description: Human-readable error message
+        data:
+          description: Additional error data
+
+    # Initialization Schemas
+    InitializeParams:
+      type: object
+      required:
+        - clientInfo
+        - capabilities
+      properties:
+        clientInfo:
+          type: object
+          required:
+            - name
+            - version
+          properties:
+            name:
+              type: string
+              description: Client name
+              example: 'ModusFabrica'
+            version:
+              type: string
+              description: Client version
+              example: '1.0.0'
+        capabilities:
+          type: object
+          description: Client capabilities
+          additionalProperties: true
+
+    InitializeResult:
+      type: object
+      required:
+        - serverCapabilities
+        - mobileCapabilities
+      properties:
+        serverCapabilities:
+          type: object
+          properties:
+            textDocumentSync:
+              type: integer
+              enum: [0, 1, 2]
+              description: '0=none, 1=full, 2=incremental'
+            completionProvider:
+              type: object
+              properties:
+                triggerCharacters:
+                  type: array
+                  items:
+                    type: string
+            hoverProvider:
+              type: boolean
+            definitionProvider:
+              type: boolean
+            documentSymbolProvider:
+              type: boolean
+            workspaceSymbolProvider:
+              type: boolean
+            referencesProvider:
+              type: boolean
+            documentFormattingProvider:
+              type: boolean
+        mobileCapabilities:
+          type: object
+          required:
+            - offlineMode
+            - backgroundSync
+            - gestureSupport
+            - hapticFeedback
+          properties:
+            offlineMode:
+              type: boolean
+              description: Offline support available
+            backgroundSync:
+              type: boolean
+              description: Background sync supported
+            gestureSupport:
+              type: boolean
+              description: Gesture navigation supported
+            hapticFeedback:
+              type: boolean
+              description: Haptic feedback available
+
+    # Session Schemas
+    CreateSessionParams:
+      type: object
+      required:
+        - clientId
+      properties:
+        clientId:
+          type: string
+          description: Unique client identifier
+        workspace:
+          type: string
+          format: uri
+          description: Initial workspace URI
+
+    Session:
+      type: object
+      required:
+        - id
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Session ID
+        createdAt:
+          type: integer
+          description: Creation timestamp (Unix milliseconds)
+        workspace:
+          type: string
+          format: uri
+          description: Workspace URI
+
+    RestoreSessionParams:
+      type: object
+      required:
+        - sessionId
+        - clientId
+      properties:
+        sessionId:
+          type: string
+          description: Previous session ID
+        clientId:
+          type: string
+          description: Client identifier
+
+    SessionState:
+      type: object
+      required:
+        - sessionId
+        - openFiles
+      properties:
+        sessionId:
+          type: string
+        workspace:
+          type: string
+          format: uri
+        openFiles:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: URIs of open files
+        activeFile:
+          type: string
+          format: uri
+          description: URI of active file
+        profileId:
+          type: string
+          description: Active language profile ID
+
+    # LSP Schemas
+    Position:
+      type: object
+      required:
+        - line
+        - character
+      properties:
+        line:
+          type: integer
+          description: 0-based line number
+          minimum: 0
+        character:
+          type: integer
+          description: 0-based character offset
+          minimum: 0
+
+    Range:
+      type: object
+      required:
+        - start
+        - end
+      properties:
+        start:
+          $ref: '#/components/schemas/Position'
+        end:
+          $ref: '#/components/schemas/Position'
+
+    TextDocument:
+      type: object
+      required:
+        - uri
+      properties:
+        uri:
+          type: string
+          format: uri
+          description: Document URI
+        languageId:
+          type: string
+          description: Language identifier
+        version:
+          type: integer
+          description: Document version number
+
+    DidOpenTextDocumentParams:
+      type: object
+      required:
+        - textDocument
+      properties:
+        textDocument:
+          type: object
+          required:
+            - uri
+            - languageId
+            - version
+            - text
+          properties:
+            uri:
+              type: string
+              format: uri
+            languageId:
+              type: string
+            version:
+              type: integer
+            text:
+              type: string
+
+    DidChangeTextDocumentParams:
+      type: object
+      required:
+        - textDocument
+        - contentChanges
+      properties:
+        textDocument:
+          type: object
+          required:
+            - uri
+            - version
+          properties:
+            uri:
+              type: string
+              format: uri
+            version:
+              type: integer
+        contentChanges:
+          type: array
+          items:
+            type: object
+            required:
+              - text
+            properties:
+              range:
+                $ref: '#/components/schemas/Range'
+              rangeLength:
+                type: integer
+              text:
+                type: string
+
+    CompletionParams:
+      type: object
+      required:
+        - textDocument
+        - position
+      properties:
+        textDocument:
+          $ref: '#/components/schemas/TextDocument'
+        position:
+          $ref: '#/components/schemas/Position'
+        context:
+          type: object
+          properties:
+            triggerKind:
+              type: integer
+              enum: [1, 2, 3]
+              description: '1=invoked, 2=trigger char, 3=incomplete'
+            triggerCharacter:
+              type: string
+
+    CompletionList:
+      type: object
+      required:
+        - isIncomplete
+        - items
+      properties:
+        isIncomplete:
+          type: boolean
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - label
+            properties:
+              label:
+                type: string
+              kind:
+                type: integer
+              detail:
+                type: string
+              documentation:
+                oneOf:
+                  - type: string
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum: [plaintext, markdown]
+                      value:
+                        type: string
+              insertText:
+                type: string
+              sortText:
+                type: string
+              filterText:
+                type: string
+
+    Diagnostic:
+      type: object
+      required:
+        - range
+        - message
+      properties:
+        range:
+          $ref: '#/components/schemas/Range'
+        severity:
+          type: integer
+          enum: [1, 2, 3, 4]
+          description: '1=error, 2=warning, 3=info, 4=hint'
+        code:
+          oneOf:
+            - type: string
+            - type: integer
+        source:
+          type: string
+        message:
+          type: string
+
+    # Language Profile Schemas
+    LanguageConfig:
+      type: object
+      required:
+        - id
+        - name
+        - extensions
+        - lspServer
+        - treeSitterGrammar
+        - downloadUrl
+        - size
+      properties:
+        id:
+          type: string
+          description: Language identifier
+          example: 'java'
+        name:
+          type: string
+          description: Human-readable language name
+          example: 'Java'
+        extensions:
+          type: array
+          items:
+            type: string
+          description: File extensions
+          example: ['.java']
+        lspServer:
+          type: string
+          description: LSP server identifier
+          example: 'jdtls'
+        treeSitterGrammar:
+          type: string
+          description: Tree-sitter grammar name
+          example: 'tree-sitter-java'
+        downloadUrl:
+          type: string
+          format: uri
+          description: LSP server download URL
+        size:
+          type: integer
+          description: Download size in bytes
+          example: 32000000
+
+    LanguageStackProfile:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - languages
+        - estimatedSize
+        - icon
+      properties:
+        id:
+          type: string
+          description: Profile identifier
+          example: 'java-fullstack'
+        name:
+          type: string
+          description: Profile name
+          example: 'Java Full Stack'
+        description:
+          type: string
+          description: Profile description
+          example: 'Backend Java, SQL, Frontend JS/HTML/CSS'
+        languages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LanguageConfig'
+        estimatedSize:
+          type: integer
+          description: Total download size in bytes
+          example: 80000000
+        icon:
+          type: string
+          description: Icon identifier
+          example: 'java-icon'
+
+    SwitchProfileParams:
+      type: object
+      required:
+        - profileId
+        - sessionId
+      properties:
+        profileId:
+          type: string
+          description: Target profile ID
+        sessionId:
+          type: string
+          description: Current session ID
+
+    SwitchProfileResult:
+      type: object
+      required:
+        - success
+        - profileId
+        - downloadRequired
+      properties:
+        success:
+          type: boolean
+        profileId:
+          type: string
+        downloadRequired:
+          type: boolean
+        estimatedTime:
+          type: integer
+          description: Estimated time in seconds
+
+    ProfileSwitchProgress:
+      type: object
+      required:
+        - profileId
+        - stage
+        - percentage
+      properties:
+        profileId:
+          type: string
+        stage:
+          type: string
+          enum:
+            - downloading
+            - installing
+            - configuring
+            - complete
+        percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        currentLanguage:
+          type: string
+        message:
+          type: string
+
+x-rpc-methods:
+  # Initialization Methods
+  mobile/initialize:
+    summary: Initialize mobile session
+    description: Handshake and capability exchange between client and server
+    request:
+      $ref: '#/components/schemas/InitializeParams'
+    response:
+      $ref: '#/components/schemas/InitializeResult'
+    example:
+      request:
+        id: '1'
+        method: 'mobile/initialize'
+        params:
+          - clientInfo:
+              name: 'ModusFabrica'
+              version: '1.0.0'
+            capabilities: {}
+      response:
+        id: '1'
+        result:
+          serverCapabilities:
+            textDocumentSync: 2
+            completionProvider:
+              triggerCharacters: ['.', ':']
+            hoverProvider: true
+          mobileCapabilities:
+            offlineMode: true
+            backgroundSync: true
+            gestureSupport: true
+            hapticFeedback: true
+
+  mobile/requestCapabilities:
+    summary: Request mobile-specific capabilities
+    description: Get mobile-specific capability information
+    request:
+      type: object
+    response:
+      type: object
+      properties:
+        offlineMode:
+          type: boolean
+        backgroundSync:
+          type: boolean
+        gestureSupport:
+          type: boolean
+        hapticFeedback:
+          type: boolean
+
+  # Session Methods
+  mobile/createSession:
+    summary: Create new session
+    description: Create a new session for the client
+    request:
+      $ref: '#/components/schemas/CreateSessionParams'
+    response:
+      $ref: '#/components/schemas/Session'
+
+  mobile/restoreSession:
+    summary: Restore previous session
+    description: Restore a previously created session
+    request:
+      $ref: '#/components/schemas/RestoreSessionParams'
+    response:
+      $ref: '#/components/schemas/SessionState'
+
+  mobile/updateSessionState:
+    summary: Update session state (notification)
+    description: Notify server of session state changes
+    notification: true
+    params:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        workspace:
+          type: string
+        openFiles:
+          type: array
+          items:
+            type: string
+        activeFile:
+          type: string
+
+  # LSP Methods
+  mobile/didOpenTextDocument:
+    summary: Document opened (notification)
+    description: Notify server that a document was opened
+    notification: true
+    params:
+      $ref: '#/components/schemas/DidOpenTextDocumentParams'
+
+  mobile/didChangeTextDocument:
+    summary: Document changed (notification)
+    description: Notify server of document changes
+    notification: true
+    params:
+      $ref: '#/components/schemas/DidChangeTextDocumentParams'
+
+  mobile/didCloseTextDocument:
+    summary: Document closed (notification)
+    description: Notify server that a document was closed
+    notification: true
+    params:
+      type: object
+      required:
+        - textDocument
+      properties:
+        textDocument:
+          type: object
+          required:
+            - uri
+          properties:
+            uri:
+              type: string
+
+  mobile/completion:
+    summary: Request code completions
+    description: Get code completion suggestions at cursor position
+    request:
+      $ref: '#/components/schemas/CompletionParams'
+    response:
+      $ref: '#/components/schemas/CompletionList'
+
+  mobile/hover:
+    summary: Request hover information
+    description: Get hover information at cursor position
+    request:
+      type: object
+      required:
+        - textDocument
+        - position
+      properties:
+        textDocument:
+          $ref: '#/components/schemas/TextDocument'
+        position:
+          $ref: '#/components/schemas/Position'
+    response:
+      type: object
+      properties:
+        contents:
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                kind:
+                  type: string
+                value:
+                  type: string
+        range:
+          $ref: '#/components/schemas/Range'
+
+  mobile/definition:
+    summary: Go to definition
+    description: Get definition location for symbol at cursor
+    request:
+      type: object
+      required:
+        - textDocument
+        - position
+      properties:
+        textDocument:
+          $ref: '#/components/schemas/TextDocument'
+        position:
+          $ref: '#/components/schemas/Position'
+    response:
+      oneOf:
+        - type: object
+          properties:
+            uri:
+              type: string
+            range:
+              $ref: '#/components/schemas/Range'
+        - type: array
+          items:
+            type: object
+            properties:
+              uri:
+                type: string
+              range:
+                $ref: '#/components/schemas/Range'
+
+  mobile/diagnostics:
+    summary: Diagnostics notification (server→client)
+    description: Server sends diagnostics (errors/warnings) to client
+    notification: true
+    direction: server-to-client
+    params:
+      type: object
+      required:
+        - uri
+        - diagnostics
+      properties:
+        uri:
+          type: string
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnostic'
+
+  # Language Profile Methods
+  mobile/listProfiles:
+    summary: List available language profiles
+    description: Get all available language stack profiles
+    request:
+      type: object
+    response:
+      type: array
+      items:
+        $ref: '#/components/schemas/LanguageStackProfile'
+
+  mobile/switchProfile:
+    summary: Switch language profile
+    description: Switch to a different language profile
+    request:
+      $ref: '#/components/schemas/SwitchProfileParams'
+    response:
+      $ref: '#/components/schemas/SwitchProfileResult'
+
+  mobile/profileSwitchProgress:
+    summary: Profile switch progress (server→client)
+    description: Server sends progress updates during profile switch
+    notification: true
+    direction: server-to-client
+    params:
+      $ref: '#/components/schemas/ProfileSwitchProgress'
+
+  mobile/getActiveProfile:
+    summary: Get active profile
+    description: Get currently active language profile
+    request:
+      type: object
+      required:
+        - sessionId
+      properties:
+        sessionId:
+          type: string
+    response:
+      type: object
+      required:
+        - profileId
+        - name
+        - languages
+      properties:
+        profileId:
+          type: string
+        name:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
