@@ -17,6 +17,7 @@
 import { injectable, postConstruct, inject } from '@theia/core/shared/inversify';
 import { MobileSessionManager } from './mobile-session-manager';
 import { MobileLSPProxy } from './mobile-lsp-proxy';
+import { LanguageProfileManager } from './language-profile-manager';
 
 // Minimal type definitions for testing - will be replaced with actual @theia/core imports
 // when the full project is built
@@ -112,6 +113,9 @@ export class MobileConnectionHandler {
     @inject(MobileLSPProxy)
     protected lspProxy?: MobileLSPProxy;
 
+    @inject(LanguageProfileManager)
+    protected profileManager?: LanguageProfileManager;
+
     @postConstruct()
     protected init(): void {
         // Initialization logic if needed
@@ -180,6 +184,12 @@ export class MobileConnectionHandler {
                     return this.handleInitialize(args[0]);
                 case 'mobile/requestCapabilities':
                     return this.handleCapabilities();
+                case '$getAvailableProfiles':
+                    return this.handleGetAvailableProfiles();
+                case '$getActiveProfile':
+                    return this.handleGetActiveProfile();
+                case '$switchProfile':
+                    return this.handleSwitchProfile(args[0]);
                 default:
                     throw new Error(`Unknown method: ${method}`);
             }
@@ -234,6 +244,36 @@ export class MobileConnectionHandler {
 
     protected generateConnectionId(): string {
         return `mobile-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    }
+
+    /**
+     * Handle $getAvailableProfiles RPC method
+     */
+    protected handleGetAvailableProfiles() {
+        if (!this.profileManager) {
+            throw new Error('Profile manager not available');
+        }
+        return this.profileManager.getAvailableProfiles();
+    }
+
+    /**
+     * Handle $getActiveProfile RPC method
+     */
+    protected handleGetActiveProfile() {
+        if (!this.profileManager) {
+            throw new Error('Profile manager not available');
+        }
+        return this.profileManager.getActiveProfile();
+    }
+
+    /**
+     * Handle $switchProfile RPC method
+     */
+    protected async handleSwitchProfile(request: any) {
+        if (!this.profileManager) {
+            throw new Error('Profile manager not available');
+        }
+        await this.profileManager.switchProfile(request);
     }
 
     dispose(): void {

@@ -16,4 +16,7 @@
 
 export * from './mobile-connection-handler';
 export * from './mobile-session-manager';
+export * from './mobile-lsp-proxy';
+export * from './language-profile-manager';
+export * from './language-profile-storage';
 export * from './mobile-backend-module';

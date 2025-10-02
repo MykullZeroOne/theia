@@ -14,6 +14,9 @@ services:
       - MOBILE_BACKEND_PORT=3030
       - MOBILE_BACKEND_HOST=0.0.0.0
       - MOBILE_WS_PATH=/mobile
+    volumes:
+      # Persist language profile storage
+      - mobile-profiles:/.theia
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
@@ -45,3 +48,7 @@ services:
 networks:
   theia-mobile:
     driver: bridge
+
+volumes:
+  mobile-profiles:
+    driver: local

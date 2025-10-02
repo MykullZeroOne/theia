@@ -1,284 +1,420 @@
-# CLAUDE.md
+# Theia Mobile Backend Development Guidelines
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Audience**: AI Assistant working on this repository
+
+This document provides guidance for developing the Theia Mobile Backend. The backend is part of a two-repository architecture that supports the ModusFabrica iOS app.
+
+---
 
 ## Project Overview
 
-Eclipse Theia is an extensible framework to develop full-fledged multi-language Cloud & Desktop IDEs and tools. This is a monorepo managed with Lerna that contains the core Theia platform, extensions, and example applications.
+Eclipse Theia Mobile is a two-repository project:
 
-## Prerequisites
+1. **Backend Repository** (THIS REPO): `/Users/michaelsmith/IdeaProjects/theia`
+   - Technology: Node.js, TypeScript, InversifyJS
+   - Package: `@theia/core-mobile`
+   - Purpose: Mobile RPC Protocol, LSP Proxy, WebSocket server, Profile Management
 
-- Node.js >= 20 and < 24
-- Python3 (for node-gyp)
-- Platform-specific build tools:
-  - Linux: build-essential, libx11-dev, libxkbfile-dev, libsecret-1-dev
-  - macOS: Xcode command line tools
-  - Windows: Visual Studio build tools 17
+2. **iOS App Repository** (SEPARATE): `/Users/michaelsmith/IdeaProjects/theia-ios/ModusFabrica`
+   - Technology: Swift, SwiftUI, iOS native
+   - Purpose: iOS-only mobile IDE application
+   - Connects to backend via WebSocket
 
-## Common Commands
+**Important**: This is an **iOS-ONLY** application at this time. There are NO React Native, Kotlin Multiplatform, or Android components. All mobile references should be to **Swift/iOS**.
 
-### Initial Setup
-```bash
-npm install                    # Install dependencies, link packages, compute references
-npm run compile                # Compile all TypeScript packages
-npm run download:plugins       # Download plugins for examples
+---
+
+## Repository Layout
+
+```
+/Users/michaelsmith/IdeaProjects/
+├── theia/                          # THIS REPO - Backend
+│   ├── packages/core-mobile/       # Mobile backend package
+│   │   ├── src/
+│   │   │   ├── common/            # Shared protocol types
+│   │   │   └── node/              # Backend services
+│   │   └── docs/mobile/           # Architecture documentation
+│   └── docs/                      # General Theia docs
+│
+└── theia-ios/                     # SEPARATE REPO - iOS App
+    └── ModusFabrica/              # iOS application
+        ├── ModusFabrica/          # Swift source code
+        └── docs/                  # iOS app documentation
 ```
 
-### Building
+---
+
+## Development Approach
+
+### Test-Driven Development (TDD)
+
+Follow TDD for all backend features:
+
+1. **Red**: Write a failing test that defines expected behavior
+2. **Green**: Implement minimal code to pass the test
+3. **Refactor**: Improve code while keeping tests green
+
+**Testing Stack**:
+- Jest for unit tests (TypeScript/Node.js)
+- ts-jest for TypeScript support
+- 100% coverage target for new code
+
+**Commands**:
 ```bash
-npm run build                  # Build everything (compile + applications)
-npm run build:browser          # Build browser example
-npm run build:electron         # Build Electron example
-npm run all                    # Install, lint, build everything
+cd packages/core-mobile
+npm test                        # Run all tests
+npm test -- --watch            # Watch mode
+npm test -- file.spec.ts       # Run specific test
 ```
 
-### Running Examples
-```bash
-npm run start:browser          # Start browser example (http://localhost:3000)
-npm run start:electron         # Start Electron example
-cd examples/browser && npm run start   # Alternative: run from example dir
+### Branching and Version Control
+
+- Create feature branches: `feature/mobile-xxx`
+- Semantic commits: `feat:`, `fix:`, `refactor:`, `test:`
+- Commit frequently with descriptive messages
+- Merge via pull requests after review
+
+---
+
+## Mobile Backend Architecture
+
+### Two-Tier Persistence Model
+
+**Critical**: There are TWO separate persistence layers:
+
+#### 1. Backend Persistence (Node.js - This Repo)
+**File**: `~/.theia/mobile-profiles.json`
+**Purpose**: 
+- Remember which profile is active on backend
+- Track which LSPs are installed on server
+- Support multi-user scenarios
+- Restore state on backend restart
+
+**When Used**:
+- Backend processes LSP requests
+- Multiple iOS clients connect to same backend
+- Backend restarts
+
+#### 2. iOS App Persistence (Swift - Separate Repo)
+**Location**: `~/Library/Application Support/ModusFabrica/`
+**Purpose**:
+- Remember user's profile preference
+- Cache LSP responses for offline mode
+- Store downloaded LSP metadata
+- Enable offline editing
+
+**When Used**:
+- App launches
+- Offline mode
+- Profile switches initiated on iOS
+
+### Synchronization Flow
+
+```
+iOS App (Offline)
+  │
+  ├─ Tree-sitter (local, instant)
+  ├─ LSP Cache (SQLite, stale but fast)
+  │
+  └─ [Goes Online] ──WebSocket──> Backend
+                                    │
+                                    ├─ Sync profile state
+                                    ├─ Live LSP requests
+                                    └─ Update cache
+
+Backend receives:
+  - Profile switch request from iOS
+  - Saves to ~/.theia/mobile-profiles.json
+  - Activates corresponding LSPs
+  - Sends responses back to iOS
+  
+iOS receives:
+  - Saves profile to local storage
+  - Updates LSP cache
+  - Both are in sync
 ```
 
-### Development Workflow
-```bash
-npm run watch                  # Watch all packages and rebuild on change
-npm run watch:browser          # Watch browser example only
-npm run watch:electron         # Watch Electron example only
+---
 
-# Watch specific package
-npx lerna run watch --scope @theia/package-name
+## Core Backend Services
 
-# Watch package with its dependencies
-npx lerna run watch --scope @theia/package-name --include-filtered-dependencies --parallel
+### 1. LanguageProfileManager
+Manages language stack profiles for on-demand LSP loading.
+
+**Features**:
+- Get available profiles (Java, .NET, Mobile Dev)
+- Switch active profile
+- Track installed languages
+- Persist state to disk
+
+**Storage**: `~/.theia/mobile-profiles.json`
+
+### 2. LanguageProfileStorage
+Handles persistence of profile state.
+
+**Features**:
+- Load/save profile data
+- Graceful error handling
+- JSON formatted output
+
+### 3. MobileLSPProxy
+Bridges LSP between backend and iOS app.
+
+**Features** (Planned):
+- Forward LSP events to iOS
+- Filter by active profile languages
+- Handle completion requests
+- Manage diagnostics
+
+### 4. MobileConnectionHandler
+Manages WebSocket connections from iOS app.
+
+### 5. MobileSessionManager
+Manages session lifecycle and state.
+
+---
+
+## Mobile RPC Protocol
+
+Communication between iOS app and backend uses a custom RPC protocol over WebSocket.
+
+### Backend → iOS (`MobileMainContext`)
+```typescript
+$showTextDocument(uri: string): Promise<void>
+$showDiagnostics(uri: string, diagnostics: Diagnostic[]): Promise<void>
+$showCompletions(completions: CompletionList): Promise<void>
 ```
 
-### Testing
-```bash
-npm run test                   # Run all tests
-npm run test:theia             # Test Theia packages only (excluding examples)
-npm run test:browser           # Test browser example
-npm run test:electron          # Test Electron example
-npm run test:playwright        # Run Playwright UI tests
+### iOS → Backend (`MobileExtContext`)
+```typescript
+$onDidChangeTextDocument(uri: string, changes: TextEdit[]): Promise<void>
+$requestCompletion(uri: string, position: Position): Promise<CompletionList>
+$requestHover(uri: string, position: Position): Promise<Hover | null>
+$requestDefinition(uri: string, position: Position): Promise<Location[]>
 
-# Test specific package
-npx lerna run test --scope @theia/package-name
-
-# Test with watch mode (if configured)
-npx lerna run test:watch --scope @theia/extension-name
+// Profile management
+$getAvailableProfiles(): Promise<LanguageStackProfile[]>
+$getActiveProfile(): Promise<ActiveProfileInfo | null>
+$switchProfile(request: ProfileSwitchRequest): Promise<void>
 ```
 
-### Linting
-```bash
-npm run lint                   # Lint all packages
-npm run lint:fix               # Auto-fix linting issues
-```
+---
 
-### Building Individual Packages
-```bash
-# From root
-npx lerna run compile --scope @theia/core
+## Language Stack Profiles
 
-# From package directory
-cd packages/core && npm run compile
-```
+Reduces storage from ~250MB (all LSPs) to 70-85MB per profile (73% reduction).
 
-### Cleaning
-```bash
-npm run clean                  # Clean build artifacts
-npm run rebuild:clean          # Clean browser modules
-npm run lint:clean             # Clean ESLint cache
-```
+### Available Profiles
 
-### Electron-Specific
-```bash
-npm run rebuild:browser        # Rebuild native modules for browser
-npm run rebuild:electron       # Rebuild native modules for Electron
-```
+1. **Java Full Stack** (80MB)
+   - Java, SQL, JavaScript, HTML, CSS
+   - Use case: Spring Boot apps
 
-## Repository Structure
+2. **.NET Full Stack** (85MB)
+   - C#, SQL, TypeScript, HTML, CSS
+   - Use case: ASP.NET Core apps
 
-### Top-Level Directories
+3. **Mobile Development** (55MB)
+   - Kotlin, Swift
+   - Use case: iOS/Android development
 
-- **`packages/`** - Runtime packages (core and extensions)
-  - Each package is a Theia extension with `theiaExtensions` in package.json
-  - Extensions can have modules for different platforms: `browser/`, `node/`, `electron-browser/`, `electron-node/`, `electron-main/`, `common/`
+### Profile State
 
-- **`dev-packages/`** - Development-time packages
-  - `@theia/cli` - Command line tool to manage Theia applications
-  - `@theia/ext-scripts` - Shared scripts for runtime packages
-  - `@theia/re-exports` - Re-export mechanism tooling
-
-- **`examples/`** - Example applications
-  - `browser/` - Browser-based IDE example
-  - `electron/` - Electron-based IDE example
-  - `api-samples/`, `api-tests/`, `playwright/` - Testing and samples
-
-- **`doc/`** - Documentation
-- **`scripts/`** - Build and utility scripts
-- **`configs/`** - Shared configuration files
-
-### Code Organization by Platform
-
-Theia separates code by target platform within each package:
-
-- **`common/`** - Basic JavaScript APIs, runs everywhere
-- **`browser/`** - Requires browser DOM APIs
-  - Can use: `common`
-- **`node/`** - Requires Node.js APIs
-  - Can use: `common`
-- **`electron-node/`** - Electron-specific Node.js code
-  - Can use: `common`, `node`
-- **`electron-browser/`** - Electron renderer process APIs
-  - Can use: `common`, `browser`
-- **`electron-main/`** - Electron main process APIs
-  - Can use: `electron-node`, `common`, `node`
-
-## Architecture Patterns
-
-### Theia Extensions
-
-Extensions declare modules in their `package.json`:
-
+**Backend** (`~/.theia/mobile-profiles.json`):
 ```json
 {
-  "theiaExtensions": [{
-    "frontend": "lib/browser/module",
-    "backend": "lib/node/module",
-    "frontendElectron": "lib/electron-browser/module",
-    "backendElectron": "lib/electron-main/module"
-  }]
+  "activeProfileId": "java-fullstack",
+  "installedLanguages": ["java", "sql", "javascript", "html", "css"],
+  "lastUpdated": 1704067200000
 }
 ```
 
-### Dependency Injection
-
-- Uses InversifyJS for dependency injection
-- Use property injection, not constructor injection (to avoid breaking changes)
-- Always add `.inSingletonScope()` for singletons
-- Use `@postConstruct()` decorated methods instead of constructors for initialization
-- Use `ContributionProvider` instead of `@multiInject`
-- Prefer classes over interface + symbol patterns (except for remote services)
-
-### Re-Exports Mechanism
-
-Import common dependencies from `@theia/core/shared/` to ensure version consistency:
-
-```typescript
-import { injectable } from '@theia/core/shared/inversify';
-import { React } from '@theia/core/shared/React';
+**iOS App** (to be implemented in Phase 3):
+```
+ModusFabrica/
+├── profile-preference.plist    # User's active profile
+├── lsp-cache.sqlite           # Cached LSP responses
+└── lsp-metadata.json          # Downloaded LSP info
 ```
 
-This prevents version conflicts and ensures stability across extensions.
+---
 
-## Key Contribution Points
+## Common Commands
 
-Extensions contribute functionality through well-defined contribution points:
+### Backend Development (This Repo)
 
-- `CommandContribution` - Register commands
-- `MenuContribution` - Register menu items
-- `KeybindingContribution` - Register keybindings
-- `ColorContribution` - Register theme colors
-- `TabBarToolbarContribution` - Toolbar items
-- `FrontendApplicationContribution` - Lifecycle hooks
+```bash
+cd packages/core-mobile
 
-## Debugging
+# Testing
+npm test                       # Run all tests (199 tests)
+npm test -- --watch           # Watch mode
+npm test -- --coverage        # Coverage report
 
-### Browser Example
-- Use VS Code launch configuration: "Launch Browser Backend"
-- For frontend: Start backend with `npm run start`, then use browser devtools or "Launch Browser Frontend" config
+# Building
+npm run compile               # Compile TypeScript
 
-### Electron Example
-- Backend: "Launch Electron Backend" configuration
-- Frontend: Start backend, then "Attach to Electron Frontend" or Help -> Toggle Electron Developer Tools
-- Combined: "Launch Electron Backend & Frontend"
+# Linting
+npm run lint                  # Check code style
+npm run lint:fix             # Auto-fix issues
+```
 
-### Plugin Host
-- Pass `--hosted-plugin-inspect=9339` to backend
-- Use "Attach to Plugin Host" launch configuration
+---
 
-### IPC Servers
-- Pass `--${server-name}-inspect` to backend
-- Run with `--log-level=debug` to see server names and PIDs
+## iOS App Integration
 
-## VS Code Extension Support
+### What iOS App Needs to Implement (Phase 3)
 
-Theia supports the VS Code Extension protocol. Test VS Code extensions by:
+The iOS app (ModusFabrica) will need:
 
-1. Place extensions in `plugins/` directory or configure in `package.json`
-2. Run `npm run download:plugins` to fetch configured plugins
-3. Start with `--plugins=local-dir:path/to/plugins`
+1. **Profile Storage Service** (Swift)
+```swift
+class ProfileStorage {
+    func saveActiveProfile(_ profileId: String)
+    func getActiveProfile() -> String?
+    func isLSPDownloaded(_ languageId: String) -> Bool
+}
+```
 
-Use `@stubbed` tag in JSDoc for API implementations that are not fully implemented yet.
+2. **LSP Cache** (CoreData/SQLite)
+```swift
+class LSPCache {
+    func cacheDiagnostics(uri: String, diagnostics: [Diagnostic])
+    func getCachedDiagnostics(uri: String) -> [Diagnostic]?
+    func cacheCompletions(uri: String, completions: CompletionList)
+}
+```
 
-## Important Conventions
+3. **WebSocket Client**
+```swift
+class TheiaWebSocketClient {
+    func connect(to url: URL)
+    func sendRPC<T>(_ method: String, params: [Any]) async throws -> T
+    func handleIncomingRPC(_ method: String, params: [Any])
+}
+```
 
-### Naming
-- PascalCase for types and enums
-- camelCase for functions, methods, properties, variables
-- Use whole words, avoid abbreviations
-- Lower-case, dash-separated file names (e.g., `document-provider.ts`)
-- Name files after the main type they export
-- Give unique names to avoid conflicts in search
+4. **Profile Sync Manager**
+```swift
+class ProfileSyncManager {
+    func syncWithBackend() async throws
+    func reconcileDifferences(local: String?, remote: String?)
+}
+```
 
-### Event Names
-Follow pattern: `on[Will|Did]VerbNoun?`
+---
 
-### Localization
-Always use `nls.localize(key, defaultValue, ...args)` or `nls.localizeByDefault(defaultValue)` for user-facing strings
+## Testing Strategy
 
-### URI/Path Handling
-- Always pass URIs (as strings) between frontend and backend, never paths
-- Use `FileService.fsPath` on frontend to get paths from URIs
-- Use `FileUri.fsPath` on backend only
-- Always define explicit URI schemes
-- Use `LabelProvider.getLongName(uri)` for human-readable full paths
-- Use `Path` API on frontend for path manipulation (not Node.js `path` module)
+### Backend Tests (Jest)
 
-### CSS/Theming
-- Use `lower-case-with-dashes` for CSS classes
-- Prefix global classes with `theia-`
-- Never use inline styles or hard-coded colors
-- Reference VS Code colors with `var(--theia-color-name)` (convert dots to dashes)
-- Register new colors via `ColorContribution` and derive from existing VS Code colors
+**Current Status**: 199 tests passing
 
-### React
-- Don't bind functions in event handlers (causes re-renders)
-- Use arrow function properties: `protected onClick = () => { ... }`
+**Test Organization**:
+- `src/common/*.spec.ts` - Protocol tests
+- `src/node/*.spec.ts` - Service tests
+- `test/package.spec.js` - Package validation
 
-## Testing Structure
+**Coverage Target**: 80%+ (currently 75%)
 
-- `src/*/foo.spec.ts` - Unit tests for foo.ts (published)
-- `src/*/test/` - Test helpers, mocks, fixtures
-- `src/*/*.slow-spec.ts` - Slow/integration tests (unpublished)
-- `src/*/*.ui-spec.ts` - UI tests (unpublished)
-- `test-resources/` - Test resources and scripts
+### iOS App Tests (XCTest - Phase 3)
 
-## Monorepo Workflow
+Will be implemented in iOS repository:
+```swift
+class ProfileStorageTests: XCTestCase {
+    func testSaveAndLoadProfile() {
+        // Test iOS persistence
+    }
+}
+```
 
-This is a Lerna monorepo with npm workspaces. When working across packages:
+---
 
-1. Changes to one package require recompilation
-2. Use `npm run watch` to auto-rebuild on changes
-3. Use `--scope` with lerna commands to target specific packages
-4. TypeScript project references are automatically computed via `npm run compute-references`
-5. After `npm install`, references are computed and `afterInstall` scripts run
+## Code Quality Standards
 
-## Pull Request Guidelines
+### TypeScript Backend
+- Strict mode enabled
+- ESLint + Prettier
+- Full JSDoc documentation
+- InversifyJS for DI
+- Property injection (not constructor)
+- `@postConstruct` for initialization
+- `.inSingletonScope()` for singletons
 
-Before creating a PR:
+### iOS App (Separate Repo)
+- Swift 5.9+
+- SwiftUI for UI
+- Swift Concurrency (async/await)
+- CoreData/SQLite for caching
+- MVVM architecture
 
-1. Discuss approach in a GitHub issue first
-2. Follow coding guidelines in `doc/coding-guidelines.md`
-3. Sign commits with `git commit -s` (Eclipse Contributor Agreement required)
-4. Ensure tests pass and linting is clean
-5. Update documentation if needed
+---
 
-## Useful Documentation
+## Key Documentation
 
-- [doc/Developing.md](doc/Developing.md) - Development guide
-- [doc/Testing.md](doc/Testing.md) - Testing guidelines
-- [doc/coding-guidelines.md](doc/coding-guidelines.md) - Code style
-- [doc/code-organization.md](doc/code-organization.md) - Platform separation
-- [doc/api-testing.md](doc/api-testing.md) - API integration testing
-- API docs: https://eclipse-theia.github.io/theia/docs/next/index.html
-- Website: https://theia-ide.org/docs/
+### Backend Documentation (This Repo)
+- [Implementation Plan](docs/mobile/IMPLEMENTATION_PLAN.md)
+- [Language Profiles](docs/mobile/LANGUAGE_PROFILES.md)
+- [LSP Architecture](docs/mobile/LSP_ARCHITECTURE.md)
+- [Mobile Architecture Summary](docs/mobile/MOBILE_ARCHITECTURE_SUMMARY.md)
+- [Next Steps](docs/mobile/NEXT_STEPS.md)
+
+### iOS App Documentation (Separate Repo)
+- Will be in `/Users/michaelsmith/IdeaProjects/theia-ios/ModusFabrica/docs/`
+
+---
+
+## Current Status
+
+### ✅ Complete (Backend)
+- Phase 1: Core backend support (WebSocket, sessions, RPC)
+- Phase 1.5: LSP Proxy foundation
+- Task 2: LanguageProfileManager service (26 tests)
+- Task 3: Profile storage & persistence (22 tests)
+
+### ⏳ In Progress (Backend)
+- Task 4: DI integration with connection handler
+- Task 5: RPC methods for profile management
+- Task 6: LSP filtering by active languages
+
+### 🔜 Next (iOS App - Separate Repo)
+- Phase 3: iOS app implementation
+- WebSocket client
+- Profile storage
+- LSP cache
+- Tree-sitter integration
+- SwiftUI editor
+
+---
+
+## Important Notes
+
+1. **No React Native**: This project uses native iOS (Swift/SwiftUI), not React Native
+2. **No Kotlin Multiplatform**: iOS-only at this time
+3. **No Android**: iOS-only at this time
+4. **Two Repositories**: Backend (this repo) and iOS app (separate repo)
+5. **Dual Persistence**: Both backend AND iOS app maintain profile state
+6. **Offline First**: iOS app works offline with Tree-sitter + LSP cache
+
+---
+
+## Getting Help
+
+### Backend Issues
+- Theia Discord: https://discord.gg/theia
+- Stack Overflow: Tag `theia-ide`
+
+### iOS Issues
+- Swift Forums: https://forums.swift.org
+- Stack Overflow: Tag `swiftui`, `ios`
+
+---
+
+## Quick Reference
+
+**Backend Repo**: `/Users/michaelsmith/IdeaProjects/theia`
+**iOS App Repo**: `/Users/michaelsmith/IdeaProjects/theia-ios/ModusFabrica`
+**Backend Package**: `packages/core-mobile`
+**Tests**: `npm test` (199 passing)
+**Platform**: iOS only (Swift/SwiftUI)
+**Architecture**: Backend + iOS app (two repositories)

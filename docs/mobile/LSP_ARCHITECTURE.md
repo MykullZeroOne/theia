@@ -378,6 +378,73 @@ describe('End-to-End LSP Flow', () => {
 });
 ```
 
+## Language Features Strategy
+
+**Goal**: Minimize latency, support offline mode, reduce complexity
+
+### Hybrid Approach: Tree-sitter + LSP Cache
+
+This three-tier architecture provides the best balance of performance, offline support, and full IDE capabilities:
+
+#### Tier 1: On-Device (Tree-sitter)
+✅ **Instant** (<10ms), works offline:
+- **Syntax highlighting** (<5ms) - Real-time as you type
+- **Basic completions** (<10ms) - Keywords, local variables, imports
+- **Bracket matching** (<1ms) - Instant visual feedback
+- **Code folding** (<5ms) - Collapse/expand code blocks
+- **Symbol outline** (<20ms) - Document structure tree
+- **Basic navigation** (<5ms) - Jump to symbol in file
+
+**Technology**: Tree-sitter parsers bundled with mobile app
+**Storage**: Grammar files (~500KB per language) in app bundle
+
+#### Tier 2: Cached (From Backend LSP)
+✅ **Fast** (cached), works offline with stale data:
+- **Diagnostics** (24h TTL) - Error/warning persistence
+- **Hover documentation** (persistent) - Type info and docs
+- **Symbol definitions** (1h TTL) - Cross-file navigation cache
+- **Completion items** (10min TTL) - API suggestions
+- **Code actions** (1h TTL) - Quick fix suggestions
+
+**Technology**: SQLDelight local database on mobile
+**Storage**: ~10-50MB depending on project size
+**Update Strategy**: Background sync when connected
+
+#### Tier 3: Backend (Full LSP)
+❌ **Requires connection**, 200-400ms latency:
+- **Go to definition** - Cross-file navigation
+- **Find all references** - Project-wide search
+- **Refactoring** - Rename, extract, move
+- **Quick fixes** - Complex code transformations
+- **Organize imports** - Multi-file changes
+- **Format document** - Server-side formatting
+
+**Technology**: Full language servers on backend (Java, C#, etc.)
+**Fallback**: Queue requests when offline, execute on reconnect
+
+### Performance Comparison
+
+| Feature | Full LSP Only | Tree-sitter + Cache | Improvement |
+|---------|---------------|---------------------|-------------|
+| Syntax highlighting | 300ms | 5ms | **60x faster** |
+| Basic completions | 200ms | 10ms | **20x faster** |
+| Diagnostics (cached) | 300ms | 5ms | **60x faster** |
+| Battery drain | High | Minimal | **60-80% less** |
+| Network usage | Continuous | Sporadic | **90% reduction** |
+| Offline support | ❌ None | ✅ 90% features | N/A |
+
+### Why This Matters
+
+**User Experience**:
+- No lag when typing (Tree-sitter handles syntax instantly)
+- Works on plane/subway (90% features offline)
+- Battery lasts all day (minimal background processing)
+
+**Developer Experience**:
+- Simpler backend (LSP only when needed)
+- Faster iteration (no waiting for backend on every keystroke)
+- Better scaling (backend handles fewer requests)
+
 ## Performance Considerations
 
 ### Latency

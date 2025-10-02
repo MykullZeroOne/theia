@@ -18,6 +18,9 @@ import { ContainerModule } from '@theia/core/shared/inversify';
 import { MobileConnectionHandler } from './mobile-connection-handler';
 import { MobileSessionManager } from './mobile-session-manager';
 import { MobileLSPProxy } from './mobile-lsp-proxy';
+import { LanguageProfileManager } from './language-profile-manager';
+import { LanguageProfileStorage } from './language-profile-storage';
+import { LanguageDetector } from './language-detector';
 
 /**
  * Inversify module for mobile backend services.
@@ -26,6 +29,9 @@ import { MobileLSPProxy } from './mobile-lsp-proxy';
  * - MobileConnectionHandler: Manages WebSocket connections from mobile clients
  * - MobileSessionManager: Manages session lifecycle and state persistence
  * - MobileLSPProxy: Bridges Language Server Protocol between backend and mobile
+ * - LanguageProfileManager: Manages language stack profiles for on-demand LSP loading
+ * - LanguageProfileStorage: Persists profile state to ~/.theia/mobile-profiles.json
+ * - LanguageDetector: Detects programming language from file URIs
  *
  * All services are bound in singleton scope for efficient resource management.
  */
@@ -33,4 +39,7 @@ export const MobileBackendModule = new ContainerModule(bind => {
     bind(MobileConnectionHandler).toSelf().inSingletonScope();
     bind(MobileSessionManager).toSelf().inSingletonScope();
     bind(MobileLSPProxy).toSelf().inSingletonScope();
+    bind(LanguageProfileStorage).toDynamicValue(() => new LanguageProfileStorage()).inSingletonScope();
+    bind(LanguageProfileManager).toSelf().inSingletonScope();
+    bind(LanguageDetector).toSelf().inSingletonScope();
 });

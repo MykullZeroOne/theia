@@ -76,7 +76,10 @@ describe('Mobile RPC Protocol', () => {
                 '$requestHover',
                 '$requestDefinition',
                 '$requestCodeActions',
-                '$requestFormatting'
+                '$requestFormatting',
+                '$getAvailableProfiles',
+                '$getActiveProfile',
+                '$switchProfile'
             ];
 
             const mockImpl: MobileRPC.MobileExtContext = {
@@ -89,7 +92,10 @@ describe('Mobile RPC Protocol', () => {
                 $requestHover: jest.fn(),
                 $requestDefinition: jest.fn(),
                 $requestCodeActions: jest.fn(),
-                $requestFormatting: jest.fn()
+                $requestFormatting: jest.fn(),
+                $getAvailableProfiles: jest.fn(),
+                $getActiveProfile: jest.fn(),
+                $switchProfile: jest.fn()
             };
 
             methods.forEach(method => {

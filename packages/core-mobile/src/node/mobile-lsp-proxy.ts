@@ -14,9 +14,12 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
+import { injectable, inject } from '@theia/core/shared/inversify';
 import { MobileSession } from './mobile-session-manager';
 import { MobileRPC } from '../common/mobile-protocol';
 import { Disposable } from './mobile-connection-handler';
+import { LanguageProfileManager } from './language-profile-manager';
+import { LanguageDetector } from './language-detector';
 
 /**
  * LSP Proxy service that bridges Language Server Protocol events
@@ -24,11 +27,21 @@ import { Disposable } from './mobile-connection-handler';
  *
  * Forwards LSP events (diagnostics, completions, hover, etc.) to mobile
  * and handles LSP requests from mobile clients.
+ *
+ * Filters LSP requests based on the active language profile to ensure
+ * only languages in the active profile are processed.
  */
+@injectable()
 export class MobileLSPProxy implements Disposable {
     protected disposables: Disposable[] = [];
     protected session?: MobileSession;
     protected disposed = false;
+
+    @inject(LanguageProfileManager)
+    protected readonly profileManager!: LanguageProfileManager;
+
+    @inject(LanguageDetector)
+    protected readonly languageDetector!: LanguageDetector;
 
     /**
      * Attach LSP proxy to a mobile session.
@@ -46,10 +59,39 @@ export class MobileLSPProxy implements Disposable {
     }
 
     /**
+     * Check if a file should be processed based on active language profile.
+     * @param uri Document URI
+     * @returns true if file's language is in the active profile
+     * @throws Error if file's language is not in active profile
+     */
+    protected shouldProcessFile(uri: string): boolean {
+        // Detect language from file extension
+        const languageId = this.languageDetector.detectLanguage(uri);
+
+        // If language cannot be detected, don't process
+        if (!languageId) {
+            throw new Error(`Cannot detect language for file: ${uri}`);
+        }
+
+        // Check if language is active in current profile
+        const isActive = this.profileManager.isLanguageActive(languageId);
+
+        if (!isActive) {
+            throw new Error(
+                `Language '${languageId}' is not active in the current profile. ` +
+                `Please switch to a profile that includes this language.`
+            );
+        }
+
+        return true;
+    }
+
+    /**
      * Forward diagnostics (errors, warnings) to mobile client.
+     * Filters diagnostics based on active language profile.
      * @param uri Document URI
      * @param diagnostics List of diagnostics
-     * @returns true if forwarded successfully, false if disposed
+     * @returns true if forwarded successfully, false if disposed or filtered
      */
     async forwardDiagnostics(uri: string, diagnostics: MobileRPC.Diagnostic[]): Promise<boolean> {
         if (this.disposed || !this.session) {
@@ -57,19 +99,28 @@ export class MobileLSPProxy implements Disposable {
         }
 
         try {
-            // In future: send via session.channel
-            // For now, just validate that we can process the data
+            // Validate inputs
             if (!uri || typeof uri !== 'string') {
                 return false;
             }
 
-            // Validate diagnostics
             if (!Array.isArray(diagnostics)) {
                 return false;
             }
 
+            // Check if file should be processed based on active profile
+            if (!this.shouldProcessFile(uri)) {
+                return false;
+            }
+
+            // In future: send via session.channel
+            // For now, just validate that we can process the data
             return true;
         } catch (error) {
+            // If filtering fails (language not active), return false but don't log error
+            if (error instanceof Error && error.message.includes('not active')) {
+                return false;
+            }
             console.error('Error forwarding diagnostics:', error);
             return false;
         }
@@ -77,90 +128,90 @@ export class MobileLSPProxy implements Disposable {
 
     /**
      * Handle completion request from mobile client.
+     * Filters requests based on active language profile.
      * @param uri Document URI
      * @param position Cursor position
      * @returns Completion list
+     * @throws Error if file's language is not in active profile
      */
     async handleCompletionRequest(uri: string, position: MobileRPC.Position): Promise<MobileRPC.CompletionList> {
         if (this.disposed || !this.session) {
             return { isIncomplete: false, items: [] };
         }
 
-        try {
-            // Validate inputs
-            if (!uri || typeof uri !== 'string' || uri.length === 0) {
-                return { isIncomplete: false, items: [] };
-            }
-
-            if (!position || typeof position.line !== 'number' || typeof position.character !== 'number') {
-                return { isIncomplete: false, items: [] };
-            }
-
-            // In future: delegate to language service
-            // For now: return empty list
-            return { isIncomplete: false, items: [] };
-        } catch (error) {
-            console.error('Error handling completion request:', error);
-            return { isIncomplete: false, items: [] };
+        // Validate inputs
+        if (!uri || typeof uri !== 'string' || uri.length === 0) {
+            throw new Error('Invalid URI');
         }
+
+        if (!position || typeof position.line !== 'number' || typeof position.character !== 'number') {
+            throw new Error('Invalid position');
+        }
+
+        // Check if file should be processed based on active profile
+        this.shouldProcessFile(uri);
+
+        // In future: delegate to language service
+        // For now: return empty list
+        return { isIncomplete: false, items: [] };
     }
 
     /**
      * Handle hover request from mobile client.
+     * Filters requests based on active language profile.
      * @param uri Document URI
      * @param position Cursor position
      * @returns Hover information or null
+     * @throws Error if file's language is not in active profile
      */
     async handleHoverRequest(uri: string, position: MobileRPC.Position): Promise<MobileRPC.Hover | null> {
         if (this.disposed || !this.session) {
             return null;
         }
 
-        try {
-            // Validate inputs
-            if (!uri || typeof uri !== 'string' || uri.length === 0) {
-                return null;
-            }
-
-            if (!position || typeof position.line !== 'number' || typeof position.character !== 'number') {
-                return null;
-            }
-
-            // In future: delegate to language service
-            return null;
-        } catch (error) {
-            console.error('Error handling hover request:', error);
-            return null;
+        // Validate inputs
+        if (!uri || typeof uri !== 'string' || uri.length === 0) {
+            throw new Error('Invalid URI');
         }
+
+        if (!position || typeof position.line !== 'number' || typeof position.character !== 'number') {
+            throw new Error('Invalid position');
+        }
+
+        // Check if file should be processed based on active profile
+        this.shouldProcessFile(uri);
+
+        // In future: delegate to language service
+        return null;
     }
 
     /**
      * Handle definition request from mobile client.
+     * Filters requests based on active language profile.
      * @param uri Document URI
      * @param position Cursor position
      * @returns Array of definition locations
+     * @throws Error if file's language is not in active profile
      */
     async handleDefinitionRequest(uri: string, position: MobileRPC.Position): Promise<MobileRPC.Location[]> {
         if (this.disposed || !this.session) {
             return [];
         }
 
-        try {
-            // Validate inputs
-            if (!uri || typeof uri !== 'string' || uri.length === 0) {
-                return [];
-            }
-
-            if (!position || typeof position.line !== 'number' || typeof position.character !== 'number') {
-                return [];
-            }
-
-            // In future: delegate to language service
-            return [];
-        } catch (error) {
-            console.error('Error handling definition request:', error);
-            return [];
+        // Validate inputs
+        if (!uri || typeof uri !== 'string' || uri.length === 0) {
+            throw new Error('Invalid URI');
         }
+
+        if (!position || typeof position.line !== 'number' || typeof position.character !== 'number') {
+            throw new Error('Invalid position');
+        }
+
+        // Check if file should be processed based on active profile
+        this.shouldProcessFile(uri);
+
+        // In future: delegate to language service
+        return [];
     }
 
     /**

@@ -14,8 +14,9 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { injectable, postConstruct } from '@theia/core/shared/inversify';
+import { injectable, postConstruct, inject } from '@theia/core/shared/inversify';
 import { Channel, Disposable } from './mobile-connection-handler';
+import { LanguageProfileManager } from './language-profile-manager';
 
 export interface MobileSessionState {
     workspace?: string;
@@ -54,9 +55,12 @@ interface PersistedSession {
 export class MobileSessionManager implements Disposable {
     private activeSessions = new Map<string, MobileSession>();
     private persistedSessions = new Map<string, PersistedSession>();
-    
+
     // Session expiration: 24 hours after destroy
     private readonly SESSION_EXPIRATION_MS = 24 * 60 * 60 * 1000;
+
+    @inject(LanguageProfileManager)
+    protected profileManager?: LanguageProfileManager;
 
     @postConstruct()
     protected init(): void {

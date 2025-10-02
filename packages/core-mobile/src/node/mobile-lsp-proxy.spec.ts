@@ -18,14 +18,37 @@ import { MobileLSPProxy } from './mobile-lsp-proxy';
 import { MobileSession } from './mobile-session-manager';
 import { MockChannel } from '../common/test/mock-channel';
 import { MobileRPC } from '../common/mobile-protocol';
+import { LanguageProfileManager } from './language-profile-manager';
+import { LanguageProfileStorage } from './language-profile-storage';
+import { LanguageDetector } from './language-detector';
+import * as os from 'os';
+import * as path from 'path';
 
 describe('MobileLSPProxy', () => {
     let proxy: MobileLSPProxy;
     let mockChannel: MockChannel;
     let mockSession: MobileSession;
+    let profileManager: LanguageProfileManager;
+    let languageDetector: LanguageDetector;
+    let storage: LanguageProfileStorage;
+    let tempDir: string;
 
-    beforeEach(() => {
+    beforeEach(async () => {
+        // Create temp directory for test storage
+        tempDir = path.join(os.tmpdir(), `lsp-proxy-test-${Date.now()}`);
+
+        // Create instances with DI
+        storage = new LanguageProfileStorage(tempDir);
+        profileManager = new LanguageProfileManager();
+        (profileManager as any).storage = storage;
+        await (profileManager as any).initialize();
+
+        languageDetector = new LanguageDetector();
+
         proxy = new MobileLSPProxy();
+        (proxy as any).profileManager = profileManager;
+        (proxy as any).languageDetector = languageDetector;
+
         mockChannel = new MockChannel();
         mockSession = {
             id: 'test-session',
@@ -40,8 +63,9 @@ describe('MobileLSPProxy', () => {
         };
     });
 
-    afterEach(() => {
+    afterEach(async () => {
         proxy.dispose();
+        await storage.clear();
     });
 
     describe('Initialization', () => {
@@ -79,6 +103,10 @@ describe('MobileLSPProxy', () => {
     });
 
     describe('Diagnostic Forwarding', () => {
+        beforeEach(async () => {
+            await profileManager.switchProfile({ profileId: 'java-fullstack' });
+        });
+
         test('should forward diagnostics to mobile client', async () => {
             await proxy.attach(mockSession);
 
@@ -90,12 +118,12 @@ describe('MobileLSPProxy', () => {
                     },
                     severity: MobileRPC.DiagnosticSeverity.Error,
                     message: 'Undefined variable',
-                    source: 'typescript'
+                    source: 'javascript'
                 }
             ];
 
-            // Simulate diagnostic event from language server
-            const didForward = await proxy.forwardDiagnostics('file:///test.ts', diagnostics);
+            // Use .js file which is in Java profile
+            const didForward = await proxy.forwardDiagnostics('file:///test.js', diagnostics);
 
             expect(didForward).toBe(true);
         });
@@ -103,7 +131,8 @@ describe('MobileLSPProxy', () => {
         test('should handle empty diagnostics', async () => {
             await proxy.attach(mockSession);
 
-            const didForward = await proxy.forwardDiagnostics('file:///test.ts', []);
+            // Use .js file which is in Java profile
+            const didForward = await proxy.forwardDiagnostics('file:///test.js', []);
 
             expect(didForward).toBe(true);
         });
@@ -124,17 +153,24 @@ describe('MobileLSPProxy', () => {
                 }
             ];
 
-            const didForward = await proxy.forwardDiagnostics('file:///test.ts', diagnostics);
+            // Use .js file which is in Java profile
+            const didForward = await proxy.forwardDiagnostics('file:///test.js', diagnostics);
 
             expect(didForward).toBe(true);
         });
     });
 
     describe('Completion Requests', () => {
+        beforeEach(async () => {
+            // Switch to Java profile so TypeScript won't work
+            await profileManager.switchProfile({ profileId: 'java-fullstack' });
+        });
+
         test('should handle completion request', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleCompletionRequest('file:///test.ts', { line: 0, character: 5 });
+            // Use .js file which is in Java profile
+            const result = await proxy.handleCompletionRequest('file:///test.js', { line: 0, character: 5 });
 
             expect(result).toBeDefined();
             expect(result).toHaveProperty('isIncomplete');
@@ -142,20 +178,20 @@ describe('MobileLSPProxy', () => {
             expect(Array.isArray(result.items)).toBe(true);
         });
 
-        test('should return empty completion list on error', async () => {
+        test('should throw error for invalid URI', async () => {
             await proxy.attach(mockSession);
 
             // Test with invalid URI
-            const result = await proxy.handleCompletionRequest('', { line: 0, character: 0 });
-
-            expect(result.isIncomplete).toBe(false);
-            expect(result.items).toEqual([]);
+            await expect(
+                proxy.handleCompletionRequest('', { line: 0, character: 0 })
+            ).rejects.toThrow('Invalid URI');
         });
 
         test('should handle completion with items', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleCompletionRequest('file:///test.ts', { line: 5, character: 10 });
+            // Use .js file which is in Java profile
+            const result = await proxy.handleCompletionRequest('file:///test.js', { line: 5, character: 10 });
 
             expect(result).toHaveProperty('isIncomplete');
             expect(Array.isArray(result.items)).toBe(true);
@@ -163,27 +199,33 @@ describe('MobileLSPProxy', () => {
     });
 
     describe('Hover Requests', () => {
+        beforeEach(async () => {
+            await profileManager.switchProfile({ profileId: 'java-fullstack' });
+        });
+
         test('should handle hover request', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleHoverRequest('file:///test.ts', { line: 0, character: 5 });
+            // Use .js file which is in Java profile
+            const result = await proxy.handleHoverRequest('file:///test.js', { line: 0, character: 5 });
 
             // Result can be null or Hover object
             expect(result === null || (result && result.contents !== undefined)).toBe(true);
         });
 
-        test('should return null on hover error', async () => {
+        test('should throw error on invalid URI', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleHoverRequest('', { line: 0, character: 0 });
-
-            expect(result).toBeNull();
+            await expect(
+                proxy.handleHoverRequest('', { line: 0, character: 0 })
+            ).rejects.toThrow('Invalid URI');
         });
 
         test('should handle hover with string content', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleHoverRequest('file:///test.ts', { line: 10, character: 5 });
+            // Use .js file which is in Java profile
+            const result = await proxy.handleHoverRequest('file:///test.js', { line: 10, character: 5 });
 
             if (result) {
                 expect(result).toHaveProperty('contents');
@@ -192,26 +234,32 @@ describe('MobileLSPProxy', () => {
     });
 
     describe('Definition Requests', () => {
+        beforeEach(async () => {
+            await profileManager.switchProfile({ profileId: 'java-fullstack' });
+        });
+
         test('should handle definition request', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleDefinitionRequest('file:///test.ts', { line: 0, character: 5 });
+            // Use .js file which is in Java profile
+            const result = await proxy.handleDefinitionRequest('file:///test.js', { line: 0, character: 5 });
 
             expect(Array.isArray(result)).toBe(true);
         });
 
-        test('should return empty array on definition error', async () => {
+        test('should throw error on invalid URI', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleDefinitionRequest('', { line: 0, character: 0 });
-
-            expect(result).toEqual([]);
+            await expect(
+                proxy.handleDefinitionRequest('', { line: 0, character: 0 })
+            ).rejects.toThrow('Invalid URI');
         });
 
         test('should handle multiple definition locations', async () => {
             await proxy.attach(mockSession);
 
-            const result = await proxy.handleDefinitionRequest('file:///test.ts', { line: 5, character: 10 });
+            // Use .js file which is in Java profile
+            const result = await proxy.handleDefinitionRequest('file:///test.js', { line: 5, character: 10 });
 
             expect(Array.isArray(result)).toBe(true);
         });
@@ -302,23 +350,31 @@ describe('MobileLSPProxy', () => {
     });
 
     describe('Error Handling', () => {
-        test('should handle errors gracefully without crashing', async () => {
+        beforeEach(async () => {
+            await profileManager.switchProfile({ profileId: 'java-fullstack' });
+        });
+
+        test('should throw errors for invalid inputs', async () => {
             await proxy.attach(mockSession);
 
-            // Should not throw even with invalid inputs
-            await expect(proxy.handleCompletionRequest('', { line: -1, character: -1 })).resolves.toBeDefined();
-            await expect(proxy.handleHoverRequest('', { line: -1, character: -1 })).resolves.toBeDefined();
-            await expect(proxy.handleDefinitionRequest('', { line: -1, character: -1 })).resolves.toBeDefined();
+            // Should throw with invalid inputs
+            await expect(proxy.handleCompletionRequest('', { line: -1, character: -1 })).rejects.toThrow();
+            await expect(proxy.handleHoverRequest('', { line: -1, character: -1 })).rejects.toThrow();
+            await expect(proxy.handleDefinitionRequest('', { line: -1, character: -1 })).rejects.toThrow();
         });
 
         test('should continue operating after error', async () => {
             await proxy.attach(mockSession);
 
             // Cause an error
-            await proxy.handleCompletionRequest('', { line: -1, character: -1 });
+            try {
+                await proxy.handleCompletionRequest('', { line: -1, character: -1 });
+            } catch (e) {
+                // Expected
+            }
 
-            // Should still work
-            const result = await proxy.handleCompletionRequest('file:///test.ts', { line: 0, character: 0 });
+            // Should still work with valid input
+            const result = await proxy.handleCompletionRequest('file:///test.js', { line: 0, character: 0 });
             expect(result).toBeDefined();
         });
     });
@@ -344,6 +400,140 @@ describe('MobileLSPProxy', () => {
 
             // Should handle gracefully (not crash)
             await expect(proxy.forwardDiagnostics('file:///test.ts', [])).resolves.toBe(false);
+        });
+    });
+
+    describe('Profile Filtering', () => {
+        beforeEach(async () => {
+            // Switch to Java profile for filtering tests
+            await profileManager.switchProfile({ profileId: 'java-fullstack' });
+            await proxy.attach(mockSession);
+        });
+
+        describe('Diagnostic Filtering', () => {
+            test('should forward diagnostics for active language (Java)', async () => {
+                const diagnostics: MobileRPC.Diagnostic[] = [{
+                    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+                    severity: MobileRPC.DiagnosticSeverity.Error,
+                    message: 'Error in Java file'
+                }];
+
+                const result = await proxy.forwardDiagnostics('file:///Main.java', diagnostics);
+                expect(result).toBe(true);
+            });
+
+            test('should filter diagnostics for inactive language (Kotlin)', async () => {
+                const diagnostics: MobileRPC.Diagnostic[] = [{
+                    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+                    severity: MobileRPC.DiagnosticSeverity.Error,
+                    message: 'Error in Kotlin file'
+                }];
+
+                const result = await proxy.forwardDiagnostics('file:///Main.kt', diagnostics);
+                expect(result).toBe(false);
+            });
+
+            test('should forward diagnostics for JavaScript (in Java profile)', async () => {
+                const diagnostics: MobileRPC.Diagnostic[] = [{
+                    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+                    severity: MobileRPC.DiagnosticSeverity.Error,
+                    message: 'Error in JS file'
+                }];
+
+                const result = await proxy.forwardDiagnostics('file:///app.js', diagnostics);
+                expect(result).toBe(true);
+            });
+        });
+
+        describe('Completion Filtering', () => {
+            test('should process completion request for active language (Java)', async () => {
+                const result = await proxy.handleCompletionRequest('file:///Main.java', { line: 0, character: 5 });
+                expect(result).toBeDefined();
+                expect(result.isIncomplete).toBe(false);
+            });
+
+            test('should reject completion request for inactive language (Kotlin)', async () => {
+                await expect(
+                    proxy.handleCompletionRequest('file:///Main.kt', { line: 0, character: 5 })
+                ).rejects.toThrow('kotlin');
+            });
+
+            test('should process completion request for JavaScript (in Java profile)', async () => {
+                const result = await proxy.handleCompletionRequest('file:///app.js', { line: 0, character: 5 });
+                expect(result).toBeDefined();
+            });
+        });
+
+        describe('Hover Filtering', () => {
+            test('should process hover request for active language (Java)', async () => {
+                const result = await proxy.handleHoverRequest('file:///Main.java', { line: 0, character: 5 });
+                expect(result).toBeNull(); // Implementation returns null for now
+            });
+
+            test('should reject hover request for inactive language (Kotlin)', async () => {
+                await expect(
+                    proxy.handleHoverRequest('file:///Main.kt', { line: 0, character: 5 })
+                ).rejects.toThrow('kotlin');
+            });
+        });
+
+        describe('Definition Filtering', () => {
+            test('should process definition request for active language (Java)', async () => {
+                const result = await proxy.handleDefinitionRequest('file:///Main.java', { line: 0, character: 5 });
+                expect(Array.isArray(result)).toBe(true);
+            });
+
+            test('should reject definition request for inactive language (Kotlin)', async () => {
+                await expect(
+                    proxy.handleDefinitionRequest('file:///Main.kt', { line: 0, character: 5 })
+                ).rejects.toThrow('kotlin');
+            });
+        });
+
+        describe('Profile Switch Updates', () => {
+            test('should update filtering when profile switches', async () => {
+                // Initially on Java profile - Kotlin should be filtered
+                await expect(
+                    proxy.handleCompletionRequest('file:///Main.kt', { line: 0, character: 5 })
+                ).rejects.toThrow('kotlin');
+
+                // Switch to Mobile Dev profile
+                await profileManager.switchProfile({ profileId: 'mobile-dev' });
+
+                // Now Kotlin should work, but Java should be filtered
+                const ktResult = await proxy.handleCompletionRequest('file:///Main.kt', { line: 0, character: 5 });
+                expect(ktResult).toBeDefined();
+
+                await expect(
+                    proxy.handleCompletionRequest('file:///Main.java', { line: 0, character: 5 })
+                ).rejects.toThrow('java');
+            });
+        });
+
+        describe('Unknown File Types', () => {
+            test('should reject requests for files with no extension', async () => {
+                await expect(
+                    proxy.handleCompletionRequest('file:///Makefile', { line: 0, character: 5 })
+                ).rejects.toThrow('Cannot detect language');
+            });
+
+            test('should reject requests for unknown file types', async () => {
+                await expect(
+                    proxy.handleCompletionRequest('file:///image.png', { line: 0, character: 5 })
+                ).rejects.toThrow('Cannot detect language');
+            });
+        });
+
+        describe('URI Handling', () => {
+            test('should handle URIs with query parameters', async () => {
+                const result = await proxy.handleCompletionRequest('file:///Main.java?version=1', { line: 0, character: 5 });
+                expect(result).toBeDefined();
+            });
+
+            test('should handle URIs with fragments', async () => {
+                const result = await proxy.handleCompletionRequest('file:///Main.java#L10', { line: 0, character: 5 });
+                expect(result).toBeDefined();
+            });
         });
     });
 });

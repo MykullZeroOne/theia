@@ -59,6 +59,14 @@ export namespace MobileRPC {
         $requestCodeActions(uri: string, range: Range, context: CodeActionContext): Promise<CodeAction[]>;
         /** Request document formatting */
         $requestFormatting(uri: string, options: FormattingOptions): Promise<TextEdit[]>;
+
+        // Profile Management: Mobile → Backend requests
+        /** Get all available language stack profiles */
+        $getAvailableProfiles(): Promise<LanguageStackProfile[]>;
+        /** Get currently active profile information */
+        $getActiveProfile(): Promise<ActiveProfileInfo | null>;
+        /** Switch to a different language stack profile */
+        $switchProfile(request: ProfileSwitchRequest): Promise<void>;
     }
 
     export interface MobileLayout {

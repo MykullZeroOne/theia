@@ -10,19 +10,11 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy root package files
-COPY package*.json ./
-COPY lerna.json ./
-COPY tsconfig.json ./
+# Copy entire monorepo (dockerignore will exclude what we don't need)
+COPY . .
 
-# Copy core-mobile package
-COPY packages/core-mobile ./packages/core-mobile
-
-# Copy necessary Theia core packages (minimal dependencies)
-COPY packages/core ./packages/core
-
-# Install dependencies
-RUN npm install --production=false
+# Install dependencies at root
+RUN npm install
 
 # Build core-mobile package
 WORKDIR /app/packages/core-mobile
@@ -37,6 +29,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Create theia directory for profile storage
+RUN mkdir -p /.theia && chmod 777 /.theia
 
 # Copy built artifacts
 COPY --from=builder /app/packages/core-mobile/lib ./packages/core-mobile/lib
@@ -58,7 +53,11 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 ENV NODE_ENV=production \
     MOBILE_BACKEND_PORT=3030 \
     MOBILE_BACKEND_HOST=0.0.0.0 \
-    LOG_LEVEL=info
+    LOG_LEVEL=info \
+    HOME=/
+
+# Volume for profile storage persistence
+VOLUME ["/.theia"]
 
 # Start backend
 CMD ["node", "lib/node/backend-main.js"]
